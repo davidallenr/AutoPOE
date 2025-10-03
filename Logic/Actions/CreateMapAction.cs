@@ -72,7 +72,7 @@ namespace AutoPOE.Logic.Actions
                 else
                 {
                     var mapStashPanel = mapDeviceWindow.GetChildFromIndices(0, 1);
-                    var anySimulacrum = mapStashPanel?.Children.FirstOrDefault(I => I.TextureName.EndsWith("DeliriumFragment.dds"));
+                    var anySimulacrum = mapStashPanel?.Children.FirstOrDefault(I =>I.Type == ExileCore.PoEMemory.ElementType.InventoryItem && I.Entity.Path.EndsWith("CurrencyAfflictionFragment"));
 
                     if (anySimulacrum == null)
                     {

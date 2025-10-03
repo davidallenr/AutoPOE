@@ -7,6 +7,8 @@ using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
 using ExileCore.Shared.Interfaces;
 using GameOffsets;
+using GameOffsets.Native;
+using System.Collections.Concurrent;
 using System.Numerics;
 
 namespace AutoPOE.Navigation
@@ -17,6 +19,7 @@ namespace AutoPOE.Navigation
         private List<uint> _blacklistItemIds = [];
         private readonly WorldGrid _worldGrid;
         private readonly PathFinder _pathFinder;
+        private readonly ConcurrentDictionary<string, List<Vector2>> _tiles;
         private Chunk[,] _chunks;
 
         public IReadOnlyList<Chunk> Chunks { get; private set; }
@@ -43,6 +46,7 @@ namespace AutoPOE.Navigation
             });
 
             PopulateWorldGrid(terrain, _worldGrid, Core.GameController.Memory);
+            ProcessTileData(terrain, _tiles = new ConcurrentDictionary<string, List<Vector2>>(), Core.GameController.Memory);
             InitializeChunks(10, _worldGrid.Width, _worldGrid.Height);
 
             // Initialize the read-only Chunks list once after _chunks array is populated.
@@ -74,6 +78,39 @@ namespace AutoPOE.Navigation
                 }
                 currentByteOffset += terrain.BytesPerRow;
             }
+        }
+
+        /// <summary>
+        /// Gets the tile detail to locate key objects for pathfinding (such as boss rooms,league mechanics, etc). 
+        /// </summary>
+        /// <param name="terrain"></param>
+        /// <param name="tiles"></param>
+        /// <param name="memory"></param>
+        private static void ProcessTileData(TerrainData terrain, ConcurrentDictionary<string, List<Vector2>> tiles, IMemory memory)
+        {
+            TileStructure[] tileData = memory.ReadStdVector<TileStructure>(terrain.TgtArray);
+            Parallel.ForEach(Partitioner.Create(0, tileData.Length), (range, loopState) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    var tgtTileStruct = memory.Read<TgtTileStruct>(tileData[i].TgtFilePtr);
+                    string detailName = memory.Read<TgtDetailStruct>(tgtTileStruct.TgtDetailPtr).name.ToString(memory);
+                    string tilePath = tgtTileStruct.TgtPath.ToString(memory);
+                    Vector2i tileGridPosition = new Vector2i(
+                        i % terrain.NumCols * 23,
+                        i / terrain.NumCols * 23
+                    );
+
+                    if (!string.IsNullOrEmpty(tilePath))
+                        tiles.GetOrAdd(tilePath, _ => new List<Vector2>())
+                        .Add(tileGridPosition);
+
+                    if (!string.IsNullOrEmpty(detailName))
+                        tiles.GetOrAdd(detailName, _ => new List<Vector2>())
+                        .Add(tileGridPosition);
+
+                }
+            });
         }
 
         /// <summary>
@@ -116,6 +153,26 @@ namespace AutoPOE.Navigation
                     };
                 }
             }
+        }
+
+        /// <summary>
+        /// Get the position for a tile (direct match or contains) closest to the player.
+        /// </summary>
+        /// <param name="searchString"></param>
+        /// <returns></returns>
+        public Vector2? FindTilePositionByName(string searchString)
+        {
+            var playerPos = Core.GameController.Player.GridPosNum;
+
+            if (_tiles.TryGetValue(searchString, out var results) && results.Any())
+                return results.OrderBy(I => playerPos.Distance(I))
+                    .FirstOrDefault();
+
+            var matchingPair = _tiles.FirstOrDefault(kvp => kvp.Key.Contains(searchString));
+            return matchingPair.Key != null && matchingPair.Value.Any()
+                ? (Vector2?)matchingPair.Value.OrderBy(I => playerPos.Distance(I))
+                    .FirstOrDefault()
+                : null;
         }
 
         public void ResetAllChunks()

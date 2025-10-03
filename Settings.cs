@@ -4,12 +4,18 @@ using ExileCore.Shared.Attributes;
 using ExileCore.Shared.Interfaces;
 using ExileCore.Shared.Nodes;
 using System;
+using System.Windows.Forms;
 using static AutoPOE.Settings.Skill;
+using AutoPOE.Logic;
 
 namespace AutoPOE
 {
     public class Settings : ISettings
     {
+        public Settings()
+        {
+            FarmMethod.SetListValues(Enum.GetNames(typeof(BotMode)).ToList());
+        }
 
         private readonly Random _random = new Random();
 
@@ -17,6 +23,9 @@ namespace AutoPOE
         public ToggleNode Enable { get; set; } = new ToggleNode(false);
         public HotkeyNode StartBot { get; set; } = (HotkeyNode)Keys.Insert;
 
+
+        [Menu("Farm Method", "What type of farming do you want to do?")]
+        public ListNode FarmMethod { get; set; } = new ListNode() { Value = "Simulacrum" };
 
         [Menu("Action Frequency", "What is the minimm time between inputs?")]
         public RangeNode<int> ActionFrequency { get; set; } = new RangeNode<int>(100, 25, 500);
@@ -56,6 +65,16 @@ namespace AutoPOE
         [Menu("Detonate Mines Key")]
         public HotkeyNode DetonateMinesKey { get; set; } = (HotkeyNode)Keys.D;
         public ToggleNode ShouldDetonateMines { get; set; } = new ToggleNode(false);
+
+
+        public Skill Skill1 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.Q };
+        public Skill Skill2 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.W };
+        public Skill Skill3 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.E };
+        public Skill Skill4 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.R };
+        public Skill Skill5 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.T };
+        public Skill Skill6 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.F };
+
+        public ScarabTrader Trader { get; set; } = new ScarabTrader();
 
         /// <summary>
         /// Finds an available movement skill that is ready to be cast.
@@ -117,15 +136,6 @@ namespace AutoPOE
                 .Select(s => s.Name)
                 .ToHashSet() ?? new HashSet<string>();
         }
-
-        public Skill Skill1 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.Q };
-        public Skill Skill2 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.W };
-        public Skill Skill3 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.E };
-        public Skill Skill4 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.R };
-        public Skill Skill5 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.T };
-        public Skill Skill6 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.F };
-
-
         /// <summary>
         /// Set all skill slots to the proper spell name. Lets us look it up later easily. 
         /// </summary>
@@ -153,7 +163,7 @@ namespace AutoPOE
             foreach (var skill in allSkills.Where(I => I.SkillName == "Righteous Fire"))
                 skill.Buff.Value = "righteous_fire";
         }
-        
+
 
         [Submenu(CollapsedByDefault = true)]
         public class Skill
@@ -173,7 +183,7 @@ namespace AutoPOE
 
 
             [Menu("Skill Name", "Name of skill.")]
-            public ListNode SkillName { get; set; } = new ListNode() { Value = "None"};
+            public ListNode SkillName { get; set; } = new ListNode() { Value = "None" };
 
 
             [Menu("Buff Name", "Name of buff to block skill from re-casting.")]
@@ -184,7 +194,7 @@ namespace AutoPOE
             public ListNode CastType { get; set; } = new ListNode() { Value = CastTypeSort.TargetMonster.ToString() };
 
             [Menu("Minimum Delay", "Minimum time (in milliseconds) between casting")]
-            public RangeNode<int> MinimumDelay { get; set; } = new RangeNode<int>(1000, 100, 60000);            
+            public RangeNode<int> MinimumDelay { get; set; } = new RangeNode<int>(1000, 100, 60000);
 
             /// <summary>
             /// Used to track when the next skill can be used (from minimum delay).
@@ -200,6 +210,18 @@ namespace AutoPOE
                 TargetSelf,
                 TargetMercenary
             }
+        }
+
+
+
+        [Submenu(CollapsedByDefault = true)]
+        public class ScarabTrader
+        {
+            [Menu("Sell Items NPC", "Display name of the NPC we should use to sell items.")]
+            public TextNode NpcName { get; set; } = new TextNode("Lilly Roth");
+
+            [Menu("Scarabs to Sell", "Name of the scarabs we should sell, comma seperated for multiple.")]
+            public TextNode ScarabsToSell { get; set; } = new TextNode("Influencing Scarab of the Shaper, Influencing Scarab of the Elder");
         }
     }
 }

@@ -5,6 +5,7 @@ using AutoPOE.Logic.Sequences;
 using ExileCore;
 using ExileCore.PoEMemory;
 using ExileCore.PoEMemory.Components;
+using ExileCore.PoEMemory.Elements.InventoryElements;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Helpers;
 using System.Windows.Forms;
@@ -15,6 +16,8 @@ namespace AutoPOE
     {
         private bool _wasInSimulacrum = false;
         private ISequence _sequence;
+
+        private ISequence _scarabTraderSequence = new ScarabTraderSequence();
         public override bool Initialise()
         {
             this.Name = "Auto POE";
@@ -36,7 +39,19 @@ namespace AutoPOE
                 return null;
 
             if (Core.CanUseAction)
-                _sequence?.Tick();
+            {
+                switch (Core.Settings.FarmMethod)
+                {
+                    case "Simulacrum":
+                        _sequence?.Tick();
+                        break;
+                    case "ScarabTrader":
+                        _scarabTraderSequence?.Tick();
+                        break;
+
+                }
+            }
+                
             return base.Tick();
         }
 
@@ -46,9 +61,20 @@ namespace AutoPOE
                 return;
 
             if (Settings.StartBot.PressedOnce())
+            {
+                _scarabTraderSequence = new ScarabTraderSequence(); 
                 Core.IsBotRunning = !Core.IsBotRunning;
+            }
 
-            _sequence?.Render();
+            switch (Core.Settings.FarmMethod)
+            {
+                case "Simulacrum":
+                    _sequence?.Render();
+                    break;
+                case "ScarabTrader":
+                    _scarabTraderSequence?.Render();
+                    break;
+            }
 
             var drawPos = new System.Numerics.Vector2(100, 200);
             if (!GameController.Area.CurrentArea.IsHideout)
