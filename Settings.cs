@@ -23,12 +23,6 @@ namespace AutoPOE
         public ToggleNode Enable { get; set; } = new ToggleNode(false);
         public HotkeyNode StartBot { get; set; } = (HotkeyNode)Keys.Insert;
 
-        [Menu("Debug Mode", "Enable debug mode to show detailed information.")]
-        public ToggleNode DebugMode { get; set; } = new ToggleNode(false);
-
-        [Menu("Debug: Draw Equipment Slots", "Draw boxes around equipment/armor inventory slots.")]
-        public ToggleNode DebugDrawEquipment { get; set; } = new ToggleNode(false);
-
         [Menu("Farm Method", "What type of farming do you want to do?")]
         public ListNode FarmMethod { get; set; } = new ListNode() { Value = "Simulacrum" };
 
@@ -76,6 +70,7 @@ namespace AutoPOE
         public Skill Skill5 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.T };
         public Skill Skill6 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.F };
 
+        public DebugSettings Debug { get; set; } = new DebugSettings();
         public ScarabTrader Trader { get; set; } = new ScarabTrader();
 
         /// <summary>
@@ -217,6 +212,16 @@ namespace AutoPOE
 
 
         [Submenu(CollapsedByDefault = true)]
+        public class DebugSettings
+        {
+            [Menu("Enable Debug Mode", "Show debug information overlay on screen.")]
+            public ToggleNode EnableDebugMode { get; set; } = new ToggleNode(false);
+
+            [Menu("Draw Inventory Items", "Draw boxes around items in your inventory.")]
+            public ToggleNode DrawInventory { get; set; } = new ToggleNode(false);
+        }
+
+        [Submenu(CollapsedByDefault = true)]
         public class ScarabTrader
         {
             [Menu("Sell Items NPC", "Display name of the NPC we should use to sell items.")]
@@ -227,5 +232,4 @@ namespace AutoPOE
         }
     }
 }
-
 

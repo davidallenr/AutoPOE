@@ -105,7 +105,7 @@ namespace AutoPOE
             }
 
             // Debug Mode Display
-            if (Settings.DebugMode)
+            if (Settings.Debug.EnableDebugMode)
             {
                 drawPos.Y += 40;
                 RenderDebugInfo(drawPos);
@@ -135,7 +135,7 @@ namespace AutoPOE
             Graphics.DrawText($"Current Area: {GameController.Area.CurrentArea.DisplayName}", drawPos, SharpDX.Color.Cyan);
 
             // Visual Debug Rendering
-            if (Settings.DebugDrawEquipment)
+            if (Settings.Debug.DrawInventory)
             {
                 RenderEquipmentSlots();
             }
