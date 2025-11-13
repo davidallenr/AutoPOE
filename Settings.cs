@@ -71,6 +71,7 @@ namespace AutoPOE
         public Skill Skill6 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.F };
 
         public DebugSettings Debug { get; set; } = new DebugSettings();
+        public CalibrationSettings Calibration { get; set; } = new CalibrationSettings();
         public ScarabTrader Trader { get; set; } = new ScarabTrader();
 
         /// <summary>
@@ -217,8 +218,33 @@ namespace AutoPOE
             [Menu("Enable Debug Mode", "Show debug information overlay on screen.")]
             public ToggleNode EnableDebugMode { get; set; } = new ToggleNode(false);
 
-            [Menu("Draw Inventory Items", "Draw boxes around items in your inventory.")]
+            [Menu("Draw Inventory Items", "Draw boxes around items and equipment slots.")]
             public ToggleNode DrawInventory { get; set; } = new ToggleNode(false);
+        }
+
+        [Submenu(CollapsedByDefault = true)]
+        public class CalibrationSettings
+        {
+            public CalibrationSettings()
+            {
+                CalibrationSlot.SetListValues(new List<string>
+                {
+                    "Helm1", "BodyArmour1", "Weapon1", "Offhand1", "Amulet1",
+                    "Ring1", "Ring2", "Gloves1", "Boots1", "Belt1"
+                });
+            }
+
+            [Menu("Calibrate Equipment Slots", "Enable calibration mode. Use Arrow Keys (hold Shift for faster) or sliders to position.")]
+            public ToggleNode CalibrateEquipment { get; set; } = new ToggleNode(false);
+
+            [Menu("Equipment Slot", "Which equipment slot to calibrate.")]
+            public ListNode CalibrationSlot { get; set; } = new ListNode() { Value = "Helm1" };
+
+            [Menu("Position X")]
+            public RangeNode<int> CalibrationX { get; set; } = new RangeNode<int>(1585, 0, 3840);
+
+            [Menu("Position Y")]
+            public RangeNode<int> CalibrationY { get; set; } = new RangeNode<int>(165, 0, 2160);
         }
 
         [Submenu(CollapsedByDefault = true)]

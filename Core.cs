@@ -1,7 +1,9 @@
 ﻿using AutoPOE.Logic.Actions;
 using AutoPOE.Navigation;
 using ExileCore;
+using ExileCore.Shared.Enums;
 using System.ComponentModel.Design;
+using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
 using Graphics = ExileCore.Graphics;
 
@@ -19,6 +21,9 @@ namespace AutoPOE
 
         public static bool HasIncubators = false;
 
+        // Equipment slot positions - shared across the plugin
+        public static Dictionary<InventorySlotE, Vector2> EquipmentSlotPositions { get; set; }
+
         /// <summary>
         /// Initializes the core components. This must be called once when the plugin starts.
         /// </summary>
@@ -31,7 +36,6 @@ namespace AutoPOE
 
             AreaChanged();
         }
-
 
 
         public static bool CanUseAction => DateTime.Now > _nextAction;

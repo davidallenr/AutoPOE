@@ -24,7 +24,9 @@ namespace AutoPOE.Logic.Actions
 
         private Navigation.Path? _currentPath;
 
-        private static readonly Dictionary<InventorySlotE, Vector2> EquipmentSlotPositions = new Dictionary<InventorySlotE, Vector2>
+        // Remove hardcoded positions - will use Core.EquipmentSlotPositions instead
+        // Kept as fallback if Core positions aren't initialized
+        private static readonly Dictionary<InventorySlotE, Vector2> DefaultEquipmentSlotPositions = new Dictionary<InventorySlotE, Vector2>
         {
             { InventorySlotE.BodyArmour1, new Vector2(1587, 296) },
             { InventorySlotE.Weapon1, new Vector2(1369, 233) },
@@ -37,6 +39,12 @@ namespace AutoPOE.Logic.Actions
             { InventorySlotE.Boots1, new Vector2(1719, 391) },
             { InventorySlotE.Belt1, new Vector2(1584, 421) }
         };
+
+        private static Dictionary<InventorySlotE, Vector2> GetEquipmentSlotPositions()
+        {
+            // Use calibrated positions from Core if available, otherwise use defaults
+            return Core.EquipmentSlotPositions ?? DefaultEquipmentSlotPositions;
+        }
 
         public async Task<ActionResultType> Tick()
         {
@@ -152,7 +160,8 @@ namespace AutoPOE.Logic.Actions
             if (!await WaitForCursorState(MouseActionType.UseItem, 2000))
                 return false;
 
-            await Controls.ClickScreenPos(EquipmentSlotPositions[targetSlot.Value]);
+            var equipmentPositions = GetEquipmentSlotPositions();
+            await Controls.ClickScreenPos(equipmentPositions[targetSlot.Value]);
 
             if (Core.GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.HoldItem)
             {
