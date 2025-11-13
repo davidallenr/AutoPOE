@@ -7,6 +7,7 @@ using ExileCore.PoEMemory;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.Elements.InventoryElements;
 using ExileCore.PoEMemory.MemoryObjects;
+using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
 using System.Windows.Forms;
 
@@ -132,6 +133,38 @@ namespace AutoPOE
             Graphics.DrawText($"Window Resolution: {windowRect.Width}x{windowRect.Height}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
             Graphics.DrawText($"Current Area: {GameController.Area.CurrentArea.DisplayName}", drawPos, SharpDX.Color.Cyan);
+
+            // Visual Debug Rendering
+            if (Settings.DebugDrawEquipment)
+            {
+                RenderEquipmentSlots();
+            }
+        }
+
+        private void RenderEquipmentSlots()
+        {
+            var inventoryPanel = GameController.IngameState.IngameUi.InventoryPanel;
+            if (inventoryPanel == null || !inventoryPanel.IsVisible)
+                return;
+
+            var playerInventory = GameController.IngameState.Data.ServerData.PlayerInventories[0].Inventory;
+            if (playerInventory?.InventorySlotItems == null)
+                return;
+
+            // Draw boxes around each inventory item
+            foreach (var item in playerInventory.InventorySlotItems)
+            {
+                if (item?.Item == null)
+                    continue;
+
+                var rect = item.GetClientRect();
+                Graphics.DrawFrame(rect, SharpDX.Color.Lime, 2);
+                
+                // Draw item name above the box
+                var textPos = new System.Numerics.Vector2(rect.X, rect.Y - 15);
+                var itemName = item.Item.Path.Split('/').LastOrDefault() ?? "Unknown";
+                Graphics.DrawText(itemName, textPos, SharpDX.Color.Yellow, 10);
+            }
         }
 
         async public override void AreaChange(AreaInstance area)
@@ -148,7 +181,7 @@ namespace AutoPOE
 
             // Bring window to front after area change
             await Task.Delay(100);
-            Controls.BringGameWindowToFront();
+            // Controls.BringGameWindowToFront();
 
 
 

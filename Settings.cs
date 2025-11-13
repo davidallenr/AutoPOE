@@ -26,6 +26,9 @@ namespace AutoPOE
         [Menu("Debug Mode", "Enable debug mode to show detailed information.")]
         public ToggleNode DebugMode { get; set; } = new ToggleNode(false);
 
+        [Menu("Debug: Draw Equipment Slots", "Draw boxes around equipment/armor inventory slots.")]
+        public ToggleNode DebugDrawEquipment { get; set; } = new ToggleNode(false);
+
         [Menu("Farm Method", "What type of farming do you want to do?")]
         public ListNode FarmMethod { get; set; } = new ListNode() { Value = "Simulacrum" };
 
