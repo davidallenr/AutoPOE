@@ -102,6 +102,36 @@ namespace AutoPOE
                 drawPos.Y += 20;
                 Graphics.DrawText($"Avg. Time: {TimeSpan.FromSeconds(SimulacrumState.AverageTimePerRun):mm\\:ss}", drawPos, SharpDX.Color.White);
             }
+
+            // Debug Mode Display
+            if (Settings.DebugMode)
+            {
+                drawPos.Y += 40;
+                RenderDebugInfo(drawPos);
+            }
+        }
+
+        private void RenderDebugInfo(System.Numerics.Vector2 startPos)
+        {
+            var drawPos = startPos;
+            
+            Graphics.DrawText("=== DEBUG INFO ===", drawPos, SharpDX.Color.Yellow);
+            drawPos.Y += 20;
+
+            Graphics.DrawText($"Bot Running: {Core.IsBotRunning}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+            Graphics.DrawText($"Can Use Action: {Core.CanUseAction}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+            Graphics.DrawText($"In Hideout: {GameController.Area.CurrentArea.IsHideout}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+            Graphics.DrawText($"Player Position: {GameController.Player.GridPos}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+            Graphics.DrawText($"Mouse Position: {Input.MousePosition}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+            var windowRect = GameController.Window.GetWindowRectangle();
+            Graphics.DrawText($"Window Resolution: {windowRect.Width}x{windowRect.Height}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+            Graphics.DrawText($"Current Area: {GameController.Area.CurrentArea.DisplayName}", drawPos, SharpDX.Color.Cyan);
         }
 
         async public override void AreaChange(AreaInstance area)

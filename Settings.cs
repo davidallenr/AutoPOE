@@ -23,6 +23,8 @@ namespace AutoPOE
         public ToggleNode Enable { get; set; } = new ToggleNode(false);
         public HotkeyNode StartBot { get; set; } = (HotkeyNode)Keys.Insert;
 
+        [Menu("Debug Mode", "Enable debug mode to show detailed information.")]
+        public ToggleNode DebugMode { get; set; } = new ToggleNode(false);
 
         [Menu("Farm Method", "What type of farming do you want to do?")]
         public ListNode FarmMethod { get; set; } = new ListNode() { Value = "Simulacrum" };
