@@ -1,4 +1,5 @@
 using System.Numerics;
+using static AutoPOE.Settings.Skill;
 
 namespace AutoPOE.Logic.Combat
 {
@@ -33,5 +34,34 @@ namespace AutoPOE.Logic.Combat
         /// Additional context about why this target was selected (for debugging)
         /// </summary>
         string LastTargetReason { get; }
+
+        /// <summary>
+        /// Gets the recommended skill for the current combat situation
+        /// </summary>
+        /// <param name="targetEntity">The target entity (can be null)</param>
+        /// <param name="playerHealth">Player health percentage</param>
+        /// <param name="enemyCount">Number of enemies nearby</param>
+        /// <returns>Recommended skill or null</returns>
+        Task<Settings.Skill?> GetRecommendedSkill(ExileCore.PoEMemory.MemoryObjects.Entity? targetEntity, float playerHealth, int enemyCount);
+
+        /// <summary>
+        /// Determines if defensive skills should be prioritized
+        /// </summary>
+        /// <param name="playerHealth">Player health percentage</param>
+        /// <param name="enemyCount">Number of enemies nearby</param>
+        /// <returns>True if defensive priority should be used</returns>
+        bool ShouldPrioritizeDefensive(float playerHealth, int enemyCount);
+
+        /// <summary>
+        /// Gets the preferred target priority for this strategy
+        /// </summary>
+        /// <returns>Target priority enum</returns>
+        TargetPrioritySort GetTargetPriority();
+
+        /// <summary>
+        /// Gets the maximum combat range for this strategy
+        /// </summary>
+        /// <returns>Maximum range in units</returns>
+        int GetMaxCombatRange();
     }
 }

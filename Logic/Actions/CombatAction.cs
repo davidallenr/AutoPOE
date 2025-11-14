@@ -9,7 +9,7 @@ using static System.ComponentModel.Design.ObjectSelectorEditor;
 
 namespace AutoPOE.Logic.Actions
 {
-    public class CombatAction:IAction
+    public class CombatAction : IAction
     {
         private Random _random = new Random();
         private Navigation.Path? _currentPath;
@@ -29,17 +29,17 @@ namespace AutoPOE.Logic.Actions
         {
             // Load strategy based on settings
             var strategyName = Core.Settings.Combat.Strategy.Value;
-            
+
             // Only reload if strategy changed
             if (_loadedStrategyName == strategyName && _combatStrategy != null)
                 return;
-            
+
             _combatStrategy = strategyName switch
             {
-                "Cast on Crit" => new StandardCombatStrategy(), // TODO: Implement CastOnCritStrategy
-                _ => new StandardCombatStrategy()
+                "Aggressive" => new AggressiveCombatStrategy(),
+                _ => new StandardCombatStrategy() // Default to Standard for any other value
             };
-            
+
             _loadedStrategyName = strategyName;
             Core.Plugin.LogMessage($"Loaded combat strategy: {_combatStrategy.Name}");
         }
@@ -56,11 +56,11 @@ namespace AutoPOE.Logic.Actions
             _bestFightPos = Core.Map.FindBestFightingPosition();
 
             // Always try to generate a new path if none exists
-            if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)            
-                _currentPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);            
+            if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
+                _currentPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
 
-            if (_currentPath != null && !_currentPath.IsFinished)            
-                await _currentPath.FollowPath();            
+            if (_currentPath != null && !_currentPath.IsFinished)
+                await _currentPath.FollowPath();
             else
                 _currentPath = null;
 
@@ -107,6 +107,9 @@ namespace AutoPOE.Logic.Actions
 
         private async Task<bool> CastTargetMonsterSpells()
         {
+            // Ensure strategy is loaded
+            LoadStrategy();
+
             // Get all valid monsters
             var monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(m => m.IsAlive && m.IsTargetable)
@@ -119,36 +122,39 @@ namespace AutoPOE.Logic.Actions
             if (targetPos == null)
                 return false;
 
-            // Find the actual target entity for rarity-based skill selection
+            // Find the actual target entity
             var bestTarget = monsters
                 .FirstOrDefault(m => m.GridPosNum == targetPos.Value);
 
-            if (bestTarget == null)
-                return false;
+            // Get player health for strategy decisions
+            var playerComponent = Core.GameController.Player.GetComponent<Life>();
+            var playerHealth = playerComponent != null ? (float)playerComponent.HPPercentage : 100f;
 
-            var skills = Core.Settings.GetAvailableMonsterTargetingSkills()
-                .OrderBy(I=> _random.Next())
-                .ToList();
+            // Count nearby enemies
+            var nearbyEnemies = monsters.Count(m => m.GridPosNum.Distance(Core.GameController.Player.GridPosNum) < 30);
 
-            switch (bestTarget.Rarity)
+            // Get recommended skill from strategy
+            var recommendedSkill = await _combatStrategy.GetRecommendedSkill(bestTarget, playerHealth, nearbyEnemies);
+
+            if (recommendedSkill == null)
             {
-                case MonsterRarity.White:
-                case MonsterRarity.Magic:
-                    skills = skills
-                        .Where(I => I.CastType == CastTypeSort.TargetMonster.ToString())
-                        .ToList();
-                    break;
-                case MonsterRarity.Rare:
-                    skills = skills
-                        .Where(I => I.CastType == CastTypeSort.TargetRareMonster.ToString() || I.CastType == CastTypeSort.TargetMonster.ToString())
-                        .ToList();
-                    break;
+                // Fallback to old system if strategy doesn't recommend anything
+                var availableSkills = Core.Settings.GetAvailableSkillsByPriority()
+                    .Where(s => s.CastType.Value != CastTypeSort.DoNotUse.ToString() &&
+                               s.CastType.Value != CastTypeSort.TargetSelf.ToString() &&
+                               s.CastType.Value != CastTypeSort.TargetMercenary.ToString())
+                    .ToList();
+
+                recommendedSkill = availableSkills.FirstOrDefault();
             }
 
-            var skill = skills.FirstOrDefault();
-            if (skill == null) return false;
-            skill.NextCast = DateTime.Now.AddMilliseconds(skill.MinimumDelay.Value);
-            await Controls.UseKeyAtGridPos(targetPos.Value, skill.Hotkey.Value);
+            if (recommendedSkill == null)
+                return false;
+
+            // Use the skill
+            recommendedSkill.NextCast = DateTime.Now.AddMilliseconds(recommendedSkill.MinimumDelay.Value);
+            await Controls.UseKeyAtGridPos(targetPos.Value, recommendedSkill.Hotkey.Value);
+
             return true;
         }
 
@@ -158,7 +164,7 @@ namespace AutoPOE.Logic.Actions
             _currentPath?.Render();
             if (_bestFightPos.Position != Vector2.Zero)
                 Core.Graphics.DrawCircle(Controls.GetScreenClampedGridPos(_bestFightPos.Position), 15, SharpDX.Color.Yellow, 3);
-            
+
             // Draw target indicator
             if (_lastTarget.HasValue)
             {

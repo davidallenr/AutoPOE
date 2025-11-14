@@ -94,22 +94,91 @@ namespace AutoPOE
             return selected.Hotkey.Value;
         }
 
-        public List<Skill> GetAvailableMonsterTargetingSkills()
+        /// <summary>
+        /// Gets skills available for a specific role, sorted by strategy priority.
+        /// </summary>
+        public List<Skill> GetSkillsByRole(Skill.SkillRoleSort role)
         {
             var usableSkillNames = GetUsableSkillNames();
             var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
 
             return allSkills
-                .Where(I => DateTime.Now > I.NextCast &&
-                usableSkillNames.Contains(I.SkillName) &&
-                (I.CastType == CastTypeSort.TargetMonster.ToString() || I.CastType == CastTypeSort.TargetRareMonster.ToString() || I.CastType == CastTypeSort.TargetUniqueMonster.ToString()))
+                .Where(s => s.SkillRole.Value == role.ToString() &&
+                           usableSkillNames.Contains(s.SkillName.Value) &&
+                           DateTime.Now > s.NextCast &&
+                           (string.IsNullOrEmpty(s.Buff.Value) || !HasBuff(s.Buff.Value)))
+                .OrderByDescending(s => s.StrategyPriority.Value)
+                .ThenBy(s => s.MinimumDelay.Value)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Gets the best skill for a target based on strategy and target priority.
+        /// </summary>
+        public Skill? GetBestSkillForTarget(Skill.TargetPrioritySort targetPriority, Skill.SkillRoleSort? preferredRole = null)
+        {
+            var usableSkillNames = GetUsableSkillNames();
+            var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
+
+            var validSkills = allSkills
+                .Where(s => s.TargetPriority.Value == targetPriority.ToString() &&
+                           usableSkillNames.Contains(s.SkillName.Value) &&
+                           DateTime.Now > s.NextCast &&
+                           s.CastType.Value != Skill.CastTypeSort.DoNotUse.ToString() &&
+                           (string.IsNullOrEmpty(s.Buff.Value) || !HasBuff(s.Buff.Value)))
+                .ToList();
+
+            // Filter by preferred role if specified
+            if (preferredRole.HasValue)
+            {
+                var roleSkills = validSkills.Where(s => s.SkillRole.Value == preferredRole.Value.ToString()).ToList();
+                if (roleSkills.Any())
+                    validSkills = roleSkills;
+            }
+
+            var bestSkill = validSkills
+                .OrderByDescending(s => s.StrategyPriority.Value)
+                .ThenBy(s => s.MinimumDelay.Value)
+                .FirstOrDefault();
+
+            if (bestSkill != null)
+            {
+                bestSkill.NextCast = DateTime.Now.AddMilliseconds(bestSkill.MinimumDelay.Value);
+            }
+
+            return bestSkill;
+        }
+
+        /// <summary>
+        /// Checks if player has a specific buff.
+        /// </summary>
+        private bool HasBuff(string buffName)
+        {
+            return Core.GameController.Player.Buffs.Any(buff => buff.Name == buffName);
+        }
+
+        /// <summary>
+        /// Gets all available skills sorted by strategy priority.
+        /// </summary>
+        public List<Skill> GetAvailableSkillsByPriority()
+        {
+            var usableSkillNames = GetUsableSkillNames();
+            var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
+
+            return allSkills
+                .Where(s => usableSkillNames.Contains(s.SkillName.Value) &&
+                           DateTime.Now > s.NextCast &&
+                           s.CastType.Value != Skill.CastTypeSort.DoNotUse.ToString() &&
+                           (string.IsNullOrEmpty(s.Buff.Value) || !HasBuff(s.Buff.Value)))
+                .OrderByDescending(s => s.StrategyPriority.Value)
+                .ThenBy(s => s.MinimumDelay.Value)
                 .ToList();
         }
 
         /// <summary>
         /// Finds an available combat skill for a specific target type.
         /// </summary>
-        public Skill GetNextCombatSkill(Skill.CastTypeSort targetType)
+        public Skill? GetNextCombatSkill(Skill.CastTypeSort targetType)
         {
             var usableSkillNames = GetUsableSkillNames();
             var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
@@ -170,30 +239,36 @@ namespace AutoPOE
             public Skill()
             {
                 CastType.SetListValues([.. Enum.GetNames(typeof(CastTypeSort))]);
+                SkillRole.SetListValues([.. Enum.GetNames(typeof(SkillRoleSort))]);
+                TargetPriority.SetListValues([.. Enum.GetNames(typeof(TargetPrioritySort))]);
             }
 
             [Menu("Hotkey", "Physical key that the skill is bound to.")]
             public HotkeyNode Hotkey { get; set; } = (HotkeyNode)Keys.Q;
 
-
-
-            [Menu("Is Movement Skill", "Should this hotkey be used for navigation")]
-            public ToggleNode IsMovementKey { get; set; } = new ToggleNode(false);
-
-
             [Menu("Skill Name", "Name of skill.")]
             public ListNode SkillName { get; set; } = new ListNode() { Value = "None" };
 
+            [Menu("Skill Role", "PrimaryDamage: Main attack skill. AreaDamage: For groups. SingleTarget: For rares/bosses. Defensive: Guard skills. Buff: Auras/buffs.")]
+            public ListNode SkillRole { get; set; } = new ListNode() { Value = SkillRoleSort.PrimaryDamage.ToString() };
 
-            [Menu("Buff Name", "Name of buff to block skill from re-casting.")]
-            public TextNode Buff { get; set; } = "";
-
+            [Menu("Target Priority", "HighestThreat: Rare/Unique first. ClosestEnemy: Nearest target. RareFirst: Only rare monsters. MostEnemies: Center of groups.")]
+            public ListNode TargetPriority { get; set; } = new ListNode() { Value = TargetPrioritySort.HighestThreat.ToString() };
 
             [Menu("Cast Type", "Targeting behavior for skill casting.")]
             public ListNode CastType { get; set; } = new ListNode() { Value = CastTypeSort.TargetMonster.ToString() };
 
+            [Menu("Is Movement Skill", "Should this hotkey be used for navigation")]
+            public ToggleNode IsMovementKey { get; set; } = new ToggleNode(false);
+
+            [Menu("Strategy Priority", "Higher priority skills are used first (1-10, 10 = highest).")]
+            public RangeNode<int> StrategyPriority { get; set; } = new RangeNode<int>(5, 1, 10);
+
             [Menu("Minimum Delay", "Minimum time (in milliseconds) between casting")]
             public RangeNode<int> MinimumDelay { get; set; } = new RangeNode<int>(1000, 100, 60000);
+
+            [Menu("Buff Name", "Name of buff to block skill from re-casting (optional).")]
+            public TextNode Buff { get; set; } = "";
 
             /// <summary>
             /// Used to track when the next skill can be used (from minimum delay).
@@ -204,10 +279,30 @@ namespace AutoPOE
             {
                 DoNotUse,
                 TargetMonster,
-                TargetRareMonster,
-                TargetUniqueMonster,
                 TargetSelf,
-                TargetMercenary
+                TargetMercenary,
+                TargetGround
+            }
+
+            public enum SkillRoleSort
+            {
+                PrimaryDamage,      // Main attack skill
+                AreaDamage,         // AOE/clear skills  
+                SingleTarget,       // Single target/boss skills
+                Defensive,          // Guard skills, panic buttons
+                Buff,               // Auras, buffs, toggles
+                Movement            // Movement/traversal skills
+            }
+
+            public enum TargetPrioritySort
+            {
+                HighestThreat,      // Rare/Unique first, then closest
+                ClosestEnemy,       // Always target nearest enemy
+                RareFirst,          // Prioritize rare monsters
+                UniqueFirst,        // Prioritize unique monsters  
+                MostEnemies,        // Target center of largest group
+                SelfTarget,         // For self-cast skills (buffs, etc)
+                AllyTarget          // For mercenary/minion buffs
             }
         }
 
@@ -216,14 +311,24 @@ namespace AutoPOE
         {
             public CombatSettings()
             {
-                Strategy.SetListValues(new List<string> { "Standard", "Cast on Crit" });
+                Strategy.SetListValues(new List<string> { "Standard", "Aggressive" });
+                SkillRotation.SetListValues(new List<string> { "Priority" });
             }
 
-            [Menu("Combat Strategy", "Select your build's combat style.")]
+            [Menu("Combat Strategy", "Standard: Targets highest rarity monsters first. Aggressive: Prioritizes groups and fast clearing.")]
             public ListNode Strategy { get; set; } = new ListNode() { Value = "Standard" };
 
-            [Menu("Enable Target Priorities", "Use advanced target selection rules (future feature).")]
-            public ToggleNode EnableTargetPriorities { get; set; } = new ToggleNode(false);
+            [Menu("Skill Usage Pattern", "Priority: Uses highest priority skills first (recommended).")]
+            public ListNode SkillRotation { get; set; } = new ListNode() { Value = "Priority" };
+
+            [Menu("Defensive Threshold", "Health percentage to trigger defensive skills.")]
+            public RangeNode<int> DefensiveThreshold { get; set; } = new RangeNode<int>(50, 10, 90);
+
+            [Menu("Buff Maintenance", "Automatically maintain important buffs.")]
+            public ToggleNode MaintainBuffs { get; set; } = new ToggleNode(true);
+
+            [Menu("Focus Fire", "Concentrate damage on single targets vs spread damage.")]
+            public ToggleNode FocusFire { get; set; } = new ToggleNode(true);
         }
 
         [Submenu(CollapsedByDefault = true)]
