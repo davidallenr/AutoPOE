@@ -92,9 +92,19 @@ namespace AutoPOE.UI
                 drawPos.Y += 20;
             }
 
-            drawPos.Y += 10; // Add spacing before next section
+            // Current Action Info (general, applies to all actions)
+            var generalSequence = sequenceManager.GetCurrentSequence(_settings.FarmMethod.Value);
+            if (generalSequence is Logic.Sequences.SimulacrumSequence generalSimSeq)
+            {
+                var actionInfo = generalSimSeq.CurrentAction?.GetType().Name ?? "None";
+                _graphics.DrawText($"Current Action: {actionInfo}", drawPos,
+                    actionInfo == "CombatAction" ? SharpDX.Color.Red :
+                    actionInfo == "ExploreAction" ? SharpDX.Color.Yellow :
+                    actionInfo == "IdleAction" ? SharpDX.Color.Gray : SharpDX.Color.Cyan);
+                drawPos.Y += 20;
+            }
 
-            // Debug: Show inventory/stash details
+            drawPos.Y += 10; // Add spacing before next section            // Debug: Show inventory/stash details
             if (_settings.Debug.ShowStashDebug)
             {
                 var stashElement = _gameController.IngameState.IngameUi.StashElement;
@@ -215,12 +225,9 @@ namespace AutoPOE.UI
                 string strategyName = "None";
                 string targetReason = "N/A";
                 string targetInfo = "None";
-                string actionInfo = "None";
 
                 if (currentSequence is Logic.Sequences.SimulacrumSequence simulacrumSeq)
                 {
-                    actionInfo = simulacrumSeq.CurrentAction?.GetType().Name ?? "None";
-
                     if (simulacrumSeq.CurrentAction is Logic.Actions.CombatAction combatAction)
                     {
                         var strategy = combatAction.CurrentStrategy;
@@ -234,20 +241,74 @@ namespace AutoPOE.UI
                             targetInfo = $"({target.X:F0}, {target.Y:F0}) @ {distance:F1}u";
                         }
                     }
+
+                    // Combat Target Validation (moved from Exploration section)
+                    var playerPos = _gameController.Player.GridPosNum;
+                    var hasValidTargets = simulacrumSeq.HasValidCombatTargets();
+                    var combatRange = simulacrumSeq.CurrentAction is Logic.Actions.CombatAction combatActionRange ?
+                        combatActionRange.CurrentStrategy?.GetMaxCombatRange() ?? Core.Settings.CombatDistance.Value :
+                        Core.Settings.CombatDistance.Value;
+
+                    // Monster Analysis (moved from Exploration section)
+                    var allMonsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                        .Where(m => m.IsAlive && m.IsTargetable && m.IsHostile)
+                        .ToList();
+                    var monstersInRange = allMonsters.Count(m => m.GridPosNum.Distance(playerPos) < combatRange);
+                    var totalMonsters = allMonsters.Count;
+
+                    // Boss Detection
+                    var bossMonsters = allMonsters
+                        .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique &&
+                                   (m.RenderName?.Contains("Kosis") == true ||
+                                    m.RenderName?.Contains("Omniphobia") == true ||
+                                    m.RenderName?.Contains("Delirium Boss") == true))
+                        .ToList();
+
+                    // Display combat info
+                    _graphics.DrawText($"Strategy: {strategyName}", drawPos, strategyName != "None" ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Combat Range: {combatRange}", drawPos, SharpDX.Color.Cyan);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Valid Targets: {hasValidTargets}", drawPos, hasValidTargets ? SharpDX.Color.LimeGreen : SharpDX.Color.Red);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Monsters: {monstersInRange}/{totalMonsters} in range", drawPos,
+                        monstersInRange > 0 ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    // Boss Priority Display
+                    if (bossMonsters.Any())
+                    {
+                        var boss = bossMonsters.First();
+                        var bossDistance = boss.GridPosNum.Distance(playerPos);
+                        _graphics.DrawText($"BOSS DETECTED: {boss.RenderName} @ {bossDistance:F1}u", drawPos, SharpDX.Color.Gold);
+                        drawPos.Y += 20;
+                    }
+                    else
+                    {
+                        _graphics.DrawText($"Boss Status: None detected", drawPos, SharpDX.Color.Gray);
+                        drawPos.Y += 20;
+                    }
+
+                    _graphics.DrawText($"Target Reason: {targetReason}", drawPos, targetReason != "N/A" ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Target Position: {targetInfo}", drawPos, targetInfo.Contains("@") ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    // Strategy-specific debug (moved from Exploration section)
+                    if (simulacrumSeq.CurrentAction is Logic.Actions.CombatAction currentCombatAction)
+                    {
+                        var strategyReason = currentCombatAction.CurrentStrategy?.LastTargetReason ?? "N/A";
+                        var hasStrategyTarget = currentCombatAction.LastTarget.HasValue;
+
+                        _graphics.DrawText($"Strategy Result: {hasStrategyTarget} - {strategyReason}", drawPos,
+                            hasStrategyTarget ? SharpDX.Color.LimeGreen : SharpDX.Color.Orange);
+                        drawPos.Y += 20;
+                    }
                 }
-
-                // Always display combat info
-                _graphics.DrawText($"Action: {actionInfo}", drawPos, SharpDX.Color.Gray);
-                drawPos.Y += 20;
-
-                _graphics.DrawText($"Strategy: {strategyName}", drawPos, strategyName != "None" ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
-                drawPos.Y += 20;
-
-                _graphics.DrawText($"Target Reason: {targetReason}", drawPos, targetReason != "N/A" ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
-                drawPos.Y += 20;
-
-                _graphics.DrawText($"Target: {targetInfo}", drawPos, targetInfo.Contains("@") ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
-                drawPos.Y += 20;
             }
 
             // Exploration Debug Info - Only show if enabled
@@ -264,52 +325,25 @@ namespace AutoPOE.UI
                     _graphics.DrawText($"Action: {actionInfo}", drawPos, SharpDX.Color.Gray);
                     drawPos.Y += 20;
 
-                    // Show simulacrum center info
+                    // Simulacrum Center (core to exploration)
                     var simulacrumCenter = Core.Map.GetSimulacrumCenter();
                     var centerValid = simulacrumCenter != Vector2.Zero;
                     _graphics.DrawText($"Simulacrum Center: {simulacrumCenter} (Valid: {centerValid})", drawPos,
                         centerValid ? SharpDX.Color.LimeGreen : SharpDX.Color.Red);
                     drawPos.Y += 20;
 
-                    // ALWAYS show target validation info (critical for debugging action transitions)
                     var playerPos = _gameController.Player.GridPosNum;
-                    var hasValidTargets = simulacrumSeq.HasValidCombatTargets();
-                    var combatRange = simulacrumSeq.CurrentAction is Logic.Actions.CombatAction combatAction ?
-                        combatAction.CurrentStrategy?.GetMaxCombatRange() ?? Core.Settings.CombatDistance.Value :
-                        Core.Settings.CombatDistance.Value;
-
-                    _graphics.DrawText($"Valid Combat Targets: {hasValidTargets} (Range: {combatRange})", drawPos,
-                        hasValidTargets ? SharpDX.Color.LimeGreen : SharpDX.Color.Red);
+                    var distanceToCenter = simulacrumCenter != Vector2.Zero ? playerPos.Distance(simulacrumCenter) : 0;
+                    _graphics.DrawText($"Distance to Center: {distanceToCenter:F1}", drawPos, SharpDX.Color.Cyan);
                     drawPos.Y += 20;
 
-                    // Show all monsters in range for debugging
-                    var allMonsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                        .Where(m => m.IsAlive && m.IsTargetable && m.IsHostile)
-                        .ToList();
-                    var monstersInRange = allMonsters.Count(m => m.GridPosNum.Distance(playerPos) < combatRange);
-                    var totalMonsters = allMonsters.Count;
-
-                    _graphics.DrawText($"Monsters: {monstersInRange}/{totalMonsters} in range", drawPos,
-                        monstersInRange > 0 ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
-                    drawPos.Y += 20;
-
-                    // Show strategy target selection result for debugging the mismatch
-                    if (simulacrumSeq.CurrentAction is Logic.Actions.CombatAction currentCombatAction)
-                    {
-                        var strategyReason = currentCombatAction.CurrentStrategy?.LastTargetReason ?? "N/A";
-                        var hasStrategyTarget = currentCombatAction.LastTarget.HasValue;
-
-                        _graphics.DrawText($"Strategy Target: {hasStrategyTarget} - {strategyReason}", drawPos,
-                            hasStrategyTarget ? SharpDX.Color.LimeGreen : SharpDX.Color.Orange);
-                        drawPos.Y += 20;
-                    }
-
-                    // ALWAYS show exploration state (regardless of current action)
+                    // Pathfinding Information
                     var hasPath = false;
                     Vector2? pathTarget = null;
                     string nextChunkInfo = "N/A";
                     int blacklistedCount = 0;
                     int consecutiveFailures = 0;
+                    Vector2? nearbyEnemyTarget = null;
 
                     if (simulacrumSeq.CurrentAction is Logic.Actions.ExploreAction exploreAction)
                     {
@@ -317,27 +351,52 @@ namespace AutoPOE.UI
                         pathTarget = exploreAction.CurrentPath?.Next;
                         blacklistedCount = exploreAction.BlacklistedChunkCount;
                         consecutiveFailures = exploreAction.ConsecutiveFailures;
+
+                        // Check if exploration is targeting nearby enemies
+                        var nearbyEnemies = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                            .Where(m => m.IsHostile && m.IsTargetable && m.IsAlive)
+                            .Where(m => m.GridPosNum.Distance(playerPos) > Core.Settings.CombatDistance.Value)
+                            .Where(m => m.GridPosNum.Distance(playerPos) <= Math.Min(Core.Settings.CombatDistance.Value * 3, 150))
+                            .OrderBy(m => m.GridPosNum.Distance(playerPos))
+                            .FirstOrDefault();
+
+                        if (nearbyEnemies != null)
+                        {
+                            nearbyEnemyTarget = nearbyEnemies.GridPosNum;
+                        }
                     }
 
                     var nextChunk = Core.Map.GetNextUnrevealedChunk();
                     nextChunkInfo = nextChunk != null ? $"{nextChunk.Position}" : "All Revealed";
 
+                    // Path Information
                     var pathInfo = hasPath ? $"Target: {pathTarget}" : "No Path";
-                    _graphics.DrawText($"Explore Path: {pathInfo}", drawPos, hasPath ? SharpDX.Color.Cyan : SharpDX.Color.Orange);
+                    _graphics.DrawText($"Current Path: {pathInfo}", drawPos, hasPath ? SharpDX.Color.Cyan : SharpDX.Color.Orange);
                     drawPos.Y += 20;
 
+                    // Enemy Seeking (new intelligent exploration behavior)
+                    if (nearbyEnemyTarget.HasValue)
+                    {
+                        var enemyDistance = nearbyEnemyTarget.Value.Distance(playerPos);
+                        _graphics.DrawText($"Seeking Enemy: {nearbyEnemyTarget.Value} @ {enemyDistance:F1}u", drawPos, SharpDX.Color.LightGreen);
+                        drawPos.Y += 20;
+                    }
+                    else
+                    {
+                        _graphics.DrawText($"Enemy Seeking: None found", drawPos, SharpDX.Color.Gray);
+                        drawPos.Y += 20;
+                    }
+
+                    // Chunk Exploration
                     _graphics.DrawText($"Next Chunk: {nextChunkInfo}", drawPos, nextChunk != null ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
                     drawPos.Y += 20;
 
-                    var distanceToCenter = simulacrumCenter != Vector2.Zero ? playerPos.Distance(simulacrumCenter) : 0;
-                    _graphics.DrawText($"Distance to Center: {distanceToCenter:F1}", drawPos, SharpDX.Color.Cyan);
+                    _graphics.DrawText($"Blacklisted Chunks: {blacklistedCount}", drawPos, blacklistedCount > 0 ? SharpDX.Color.Orange : SharpDX.Color.Gray);
                     drawPos.Y += 20;
 
-                    _graphics.DrawText($"Blacklisted Chunks: {blacklistedCount}", drawPos, SharpDX.Color.Gray);
-                    drawPos.Y += 20;
-
-                    _graphics.DrawText($"Consecutive Failures: {consecutiveFailures}", drawPos,
-                        consecutiveFailures > 50 ? SharpDX.Color.Orange : SharpDX.Color.Gray);
+                    _graphics.DrawText($"Pathfinding Failures: {consecutiveFailures}", drawPos,
+                        consecutiveFailures > 50 ? SharpDX.Color.Red :
+                        consecutiveFailures > 25 ? SharpDX.Color.Orange : SharpDX.Color.Gray);
                     drawPos.Y += 20;
 
                     // Show warning if too many failures
@@ -346,6 +405,7 @@ namespace AutoPOE.UI
                         _graphics.DrawText($"WARNING: High pathfinding failures - may be stuck!", drawPos, SharpDX.Color.Red);
                         drawPos.Y += 20;
                     }
+
                 }
             }
 
