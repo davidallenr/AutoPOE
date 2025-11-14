@@ -17,22 +17,30 @@ namespace AutoPOE.Logic.Combat.Strategies
 
         private Vector2? _lastTargetPosition;
         private DateTime _lastTargetTime = DateTime.MinValue;
-        private const float TARGET_STABILITY_DURATION = 0.8f; // Reduced duration for more responsive targeting
+        private const float TARGET_STABILITY_DURATION = 1.5f; // Longer duration for target stability
+        private DateTime _lastTargetTimeout = DateTime.MinValue;
+        private const float TARGET_TIMEOUT = 5.0f; // Reset if stuck on unreachable target
 
         public Task<Vector2?> SelectTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters)
         {
             var maxRange = GetMaxCombatRange();
             var playerPos = Core.GameController.Player.GridPosNum;
-            var validMonsters = monsters
-                .Where(m => m.IsHostile
-                    && m.IsTargetable
-                    && m.IsAlive
-                    && m.GridPosNum.Distance(playerPos) < maxRange)
+
+            // Debug: Check why monsters are being filtered out
+            var hostileMonsters = monsters.Where(m => m.IsHostile).ToList();
+            var targetableMonsters = hostileMonsters.Where(m => m.IsTargetable).ToList();
+            var aliveMonsters = targetableMonsters.Where(m => m.IsAlive).ToList();
+            var validMonsters = aliveMonsters
+                .Where(m => m.GridPosNum.Distance(playerPos) <= maxRange)
                 .ToList();
 
             if (!validMonsters.Any())
             {
-                LastTargetReason = "No valid monsters in range";
+                // Provide detailed debug info about why no monsters are valid
+                var closestDistance = aliveMonsters.Any() ?
+                    aliveMonsters.Min(m => m.GridPosNum.Distance(playerPos)) : -1;
+
+                LastTargetReason = $"No valid monsters in range. Max: {maxRange}, Total: {monsters.Count}, Hostile: {hostileMonsters.Count}, Targetable: {targetableMonsters.Count}, Alive: {aliveMonsters.Count}, Closest: {closestDistance:F1}";
                 _lastTargetPosition = null;
                 _lastTargetTime = DateTime.MinValue; // Reset timing when no monsters
                 return Task.FromResult<Vector2?>(null);
@@ -42,8 +50,9 @@ namespace AutoPOE.Logic.Combat.Strategies
             if (_lastTargetPosition.HasValue &&
                 DateTime.Now < _lastTargetTime.AddSeconds(TARGET_STABILITY_DURATION))
             {
+                // Check for targets near our last position
                 var nearCurrentTarget = validMonsters
-                    .Where(m => m.GridPosNum.Distance(_lastTargetPosition.Value) < 20)
+                    .Where(m => m.GridPosNum.Distance(_lastTargetPosition.Value) < 30) // Increased area for stability
                     .ToList();
 
                 if (nearCurrentTarget.Any())
@@ -58,11 +67,30 @@ namespace AutoPOE.Logic.Combat.Strategies
                     {
                         var distance = stableTarget.GridPosNum.Distance(playerPos);
                         LastTargetReason = $"Focused on current area ({stableTarget.Rarity}) at {distance:F1} units";
+
+                        // Update position to track moving enemies (especially for unique)
+                        if (stableTarget.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
+                        {
+                            _lastTargetPosition = stableTarget.GridPosNum;
+                        }
+
                         return Task.FromResult<Vector2?>(stableTarget.GridPosNum);
                     }
                 }
                 else
                 {
+                    // No monsters near last target, but check if we should stick with a unique enemy
+                    var uniqueTarget = validMonsters.FirstOrDefault(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique);
+                    if (uniqueTarget != null)
+                    {
+                        // Extend stability for unique enemies
+                        _lastTargetPosition = uniqueTarget.GridPosNum;
+                        _lastTargetTime = DateTime.Now;
+                        var distance = uniqueTarget.GridPosNum.Distance(playerPos);
+                        LastTargetReason = $"Following unique enemy at {distance:F1} units";
+                        return Task.FromResult<Vector2?>(uniqueTarget.GridPosNum);
+                    }
+
                     // No monsters near last target, reset timing to find new area faster
                     _lastTargetTime = DateTime.MinValue;
                 }
@@ -82,16 +110,18 @@ namespace AutoPOE.Logic.Combat.Strategies
                 _lastTargetTime = DateTime.MinValue; // Reset timing
             }
 
-            // Find new target area - center of largest group
+            // Find new target area - use Focus Fire setting to determine priority
             var bestTarget = targetsToConsider
                 .Select(m => new
                 {
                     Monster = m,
-                    NearbyCount = targetsToConsider.Count(other => other.GridPosNum.Distance(m.GridPosNum) < 20)
+                    NearbyCount = targetsToConsider.Count(other => other.GridPosNum.Distance(m.GridPosNum) < 20),
+                    RarityWeight = Navigation.Map.GetMonsterRarityWeight(m.Rarity),
+                    Distance = m.GridPosNum.Distance(playerPos)
                 })
-                .OrderByDescending(x => x.NearbyCount) // Prefer groups
-                .ThenByDescending(x => Navigation.Map.GetMonsterRarityWeight(x.Monster.Rarity)) // Then rarity
-                .ThenBy(x => x.Monster.GridPosNum.Distance(playerPos)) // Then distance
+                .OrderByDescending(x => Core.Settings.Combat.FocusFire.Value ? x.RarityWeight : x.NearbyCount) // Focus Fire: rarity first, else groups first
+                .ThenByDescending(x => Core.Settings.Combat.FocusFire.Value ? x.NearbyCount : x.RarityWeight) // Secondary priority
+                .ThenBy(x => x.Distance) // Always prefer closer targets as tie-breaker
                 .FirstOrDefault();
 
             if (bestTarget == null)
@@ -106,7 +136,8 @@ namespace AutoPOE.Logic.Combat.Strategies
             _lastTargetTime = DateTime.Now;
 
             var targetDistance = bestTarget.Monster.GridPosNum.Distance(playerPos);
-            LastTargetReason = $"New group: {bestTarget.NearbyCount} monsters ({bestTarget.Monster.Rarity}) at {targetDistance:F1} units";
+            var focusMode = Core.Settings.Combat.FocusFire.Value ? "Focus Fire" : "Group Clear";
+            LastTargetReason = $"{focusMode}: {bestTarget.Monster.Rarity} ({bestTarget.NearbyCount} nearby) at {targetDistance:F1} units";
 
             return Task.FromResult<Vector2?>(bestTarget.Monster.GridPosNum);
         }
@@ -133,9 +164,11 @@ namespace AutoPOE.Logic.Combat.Strategies
                 }
             }
 
-            // Always prefer area damage for aggressive clearing
+            // Adjust strategy based on Focus Fire and enemy count
             var preferredRole = enemyCount > 1 ? SkillRoleSort.AreaDamage : SkillRoleSort.PrimaryDamage;
-            var targetPriority = TargetPrioritySort.MostEnemies; // Always target groups
+            var targetPriority = Core.Settings.Combat.FocusFire.Value ?
+                TargetPrioritySort.HighestThreat :  // Focus Fire: target highest threat (rare/unique) 
+                TargetPrioritySort.MostEnemies;     // Group Clear: target center of groups
 
             var skill = Core.Settings.GetBestSkillForTarget(targetPriority, preferredRole);
             return Task.FromResult(skill);
@@ -149,13 +182,16 @@ namespace AutoPOE.Logic.Combat.Strategies
 
         public TargetPrioritySort GetTargetPriority()
         {
-            return TargetPrioritySort.MostEnemies; // Always prioritize groups
+            return Core.Settings.Combat.FocusFire.Value ?
+                TargetPrioritySort.HighestThreat :  // Focus Fire: prioritize rare/unique monsters
+                TargetPrioritySort.MostEnemies;     // Group Clear: prioritize groups
         }
 
         public int GetMaxCombatRange()
         {
-            // Use base range for aggressive builds to avoid targeting unreachable monsters
-            return Math.Min(Core.Settings.CombatDistance.Value, 45);
+            // Aggressive builds need longer range to find more targets and groups
+            // This ensures we can see enemies that are visible on screen
+            return Math.Min(Core.Settings.CombatDistance.Value + 15, 60);
         }
     }
 }

@@ -71,6 +71,11 @@ namespace AutoPOE
         public Skill Skill5 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.T };
         public Skill Skill6 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.F };
 
+        [Menu("Movement Skills", "Skills used ONLY for navigation and movement")]
+        public MovementSkill MovementSkill1 { get; set; } = new MovementSkill { Hotkey = (HotkeyNode)Keys.None };
+        public MovementSkill MovementSkill2 { get; set; } = new MovementSkill { Hotkey = (HotkeyNode)Keys.None };
+        public MovementSkill MovementSkill3 { get; set; } = new MovementSkill { Hotkey = (HotkeyNode)Keys.None };
+
         public DebugSettings Debug { get; set; } = new DebugSettings();
         public CalibrationSettings Calibration { get; set; } = new CalibrationSettings();
         public ScarabTrader Trader { get; set; } = new ScarabTrader();
@@ -81,13 +86,15 @@ namespace AutoPOE
         public Keys GetNextMovementSkill()
         {
             var usableSkillNames = GetUsableSkillNames();
-            var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
+            var allMovementSkills = new List<MovementSkill> { MovementSkill1, MovementSkill2, MovementSkill3 };
 
-            var validMovementSkills = allSkills
-                .Where(s => s.IsMovementKey.Value && usableSkillNames.Contains(s.SkillName.Value) && DateTime.Now > s.NextCast)
+            var validMovementSkills = allMovementSkills
+                .Where(s => s.SkillName.Value != "None" &&
+                           usableSkillNames.Contains(s.SkillName.Value) &&
+                           DateTime.Now > s.NextCast)
                 .ToList();
 
-            if (!validMovementSkills.Any()) return Keys.E;
+            if (!validMovementSkills.Any()) return Keys.E; // Fallback
 
             var selected = validMovementSkills[_random.Next(validMovementSkills.Count)];
             selected.NextCast = DateTime.Now.AddMilliseconds(selected.MinimumDelay.Value);
@@ -222,9 +229,16 @@ namespace AutoPOE
             Skill5.SkillName.SetListValues(skillOptions);
             Skill6.SkillName.SetListValues(skillOptions);
 
-            var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
+            // Set up movement skills with the same skill options
+            MovementSkill1.SkillName.SetListValues(skillOptions);
+            MovementSkill2.SkillName.SetListValues(skillOptions);
+            MovementSkill3.SkillName.SetListValues(skillOptions);
 
-            foreach (var skill in allSkills.Where(I => I.SkillName == "Move"))
+            var allSkills = new List<Skill> { Skill1, Skill2, Skill3, Skill4, Skill5, Skill6 };
+            var allMovementSkills = new List<MovementSkill> { MovementSkill1, MovementSkill2, MovementSkill3 };
+
+            // Set movement skills to low delay by default
+            foreach (var skill in allMovementSkills.Where(I => I.SkillName.Value == "Move"))
                 skill.MinimumDelay.Value = 100;
 
 
@@ -232,6 +246,29 @@ namespace AutoPOE
                 skill.Buff.Value = "righteous_fire";
         }
 
+        [Submenu(CollapsedByDefault = true)]
+        public class MovementSkill
+        {
+            public MovementSkill()
+            {
+                // Don't try to populate skills here - Core.GameController is null during initialization
+                // Skills will be populated later in PopulateSkillNames()
+            }
+
+            [Menu("Hotkey", "Physical key that the movement skill is bound to.")]
+            public HotkeyNode Hotkey { get; set; } = (HotkeyNode)Keys.None;
+
+            [Menu("Skill Name", "Name of the movement skill.")]
+            public ListNode SkillName { get; set; } = new ListNode() { Value = "None" };
+
+            [Menu("Minimum Delay", "Minimum time (in milliseconds) between uses")]
+            public RangeNode<int> MinimumDelay { get; set; } = new RangeNode<int>(250, 100, 2000);
+
+            /// <summary>
+            /// Used to track when the next skill can be used (from minimum delay).
+            /// </summary>
+            public DateTime NextCast = DateTime.MinValue;
+        }
 
         [Submenu(CollapsedByDefault = true)]
         public class Skill
@@ -257,9 +294,6 @@ namespace AutoPOE
 
             [Menu("Cast Type", "Targeting behavior for skill casting.")]
             public ListNode CastType { get; set; } = new ListNode() { Value = CastTypeSort.TargetMonster.ToString() };
-
-            [Menu("Is Movement Skill", "Should this hotkey be used for navigation")]
-            public ToggleNode IsMovementKey { get; set; } = new ToggleNode(false);
 
             [Menu("Strategy Priority", "Higher priority skills are used first (1-10, 10 = highest).")]
             public RangeNode<int> StrategyPriority { get; set; } = new RangeNode<int>(5, 1, 10);
