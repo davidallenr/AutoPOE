@@ -298,16 +298,6 @@ namespace AutoPOE.UI
                     _graphics.DrawText($"Target Position: {targetInfo}", drawPos, targetInfo.Contains("@") ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
                     drawPos.Y += 20;
 
-                    // Strategy-specific debug (moved from Exploration section)
-                    if (simulacrumSeq.CurrentAction is Logic.Actions.CombatAction currentCombatAction)
-                    {
-                        var strategyReason = currentCombatAction.CurrentStrategy?.LastTargetReason ?? "N/A";
-                        var hasStrategyTarget = currentCombatAction.LastTarget.HasValue;
-
-                        _graphics.DrawText($"Strategy Result: {hasStrategyTarget} - {strategyReason}", drawPos,
-                            hasStrategyTarget ? SharpDX.Color.LimeGreen : SharpDX.Color.Orange);
-                        drawPos.Y += 20;
-                    }
                 }
             }
 

@@ -14,15 +14,55 @@ namespace AutoPOE.Logic
     {
         private static readonly Stopwatch _runTimer = new Stopwatch();
         public static TimeSpan CurrentRunDuration => _runTimer.Elapsed;
+
+        // Legacy in-memory stats (for backward compatibility)
         private static readonly List<double> _runTimes = new List<double>();
         private static readonly List<int> _wavesCompleted = new List<int>();
-        public static int TotalRunsCompleted => _runTimes.Count;
-        public static double AverageTimePerRun => TotalRunsCompleted > 0 ? _runTimes.Average() : 0;
-        public static double AverageWavesCompleted => TotalRunsCompleted > 0 ? _wavesCompleted.Average() : 0;
+
+        // Persistent statistics
+        private static SimulacrumStatsPersistence? _statsPersistence;
+
+        // Legacy properties (now delegate to persistent stats when available)
+        public static int TotalRunsCompleted => _statsPersistence?.GetDisplayStats().TotalRuns ?? _runTimes.Count;
+        public static double AverageTimePerRun => _statsPersistence?.GetDisplayStats().OverallAverageTime ?? (_runTimes.Count > 0 ? _runTimes.Average() : 0);
+        public static double AverageWavesCompleted => _wavesCompleted.Count > 0 ? _wavesCompleted.Average() : 15;
+
+        /// <summary>
+        /// Initializes the persistent statistics system
+        /// </summary>
+        public static void InitializeStatsPersistence(string configDirectory, Action<string> logMessage, Action<string> logError)
+        {
+            try
+            {
+                _statsPersistence = new SimulacrumStatsPersistence(configDirectory, logMessage, logError);
+                _statsPersistence.LoadStats();
+            }
+            catch (Exception ex)
+            {
+                logError?.Invoke($"Failed to initialize Simulacrum stats persistence: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Gets enhanced display statistics (includes persistent data)
+        /// </summary>
+        public static SimulacrumStatsDisplay GetEnhancedStats()
+        {
+            return _statsPersistence?.GetDisplayStats() ?? new SimulacrumStatsDisplay
+            {
+                TotalRuns = _runTimes.Count,
+                OverallAverageTime = _runTimes.Count > 0 ? _runTimes.Average() : 0
+            };
+        }
+
         public static void RecordRun(int wavesCompleted, double durationSeconds)
         {
+            // Legacy in-memory tracking
             _wavesCompleted.Add(wavesCompleted);
             _runTimes.Add(durationSeconds);
+
+            // Persistent tracking
+            _statsPersistence?.RecordCompletedRun(durationSeconds, wavesCompleted);
         }
 
 
@@ -68,7 +108,7 @@ namespace AutoPOE.Logic
 
             var playerPos = Core.GameController.Player.GridPosNum;
 
-            if(playerPos != LastPosition)
+            if (playerPos != LastPosition)
             {
                 LastPosition = playerPos;
                 LastMovedAt = DateTime.Now;
@@ -129,10 +169,10 @@ namespace AutoPOE.Logic
             {
                 hasIncubatorsInStash = visibleStash.VisibleInventoryItems?
                     .Any(item => item?.Item != null && (
-                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) || 
+                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) ||
                         (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)))) ?? false;
             }
-            
+
             // Check for incubators in player inventory
             var hasIncubatorsInInventory = false;
             try
@@ -142,7 +182,7 @@ namespace AutoPOE.Logic
                 {
                     hasIncubatorsInInventory = playerInventory
                         .Any(item => item?.Item != null && (
-                            (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) || 
+                            (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) ||
                             (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))));
                 }
             }
@@ -151,7 +191,7 @@ namespace AutoPOE.Logic
                 // Inventory access can fail during area transitions
                 hasIncubatorsInInventory = false;
             }
-            
+
             Core.HasIncubators = hasIncubatorsInStash || hasIncubatorsInInventory;
         }
     }
