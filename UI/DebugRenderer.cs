@@ -37,7 +37,8 @@ namespace AutoPOE.UI
         /// </summary>
         /// <param name="startPos">Starting screen position for the debug text</param>
         /// <param name="sequenceManager">The sequence manager to get current action info</param>
-        public void RenderDebugInfo(Vector2 startPos, SequenceManager sequenceManager)
+        /// <returns>The Y position where the debug info ends</returns>
+        public float RenderDebugInfo(Vector2 startPos, SequenceManager sequenceManager)
         {
             var drawPos = startPos;
 
@@ -254,6 +255,8 @@ namespace AutoPOE.UI
             {
                 RenderInventoryOverlay();
             }
+
+            return drawPos.Y;
         }
 
         /// <summary>

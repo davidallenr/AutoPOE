@@ -26,7 +26,7 @@ namespace AutoPOE.UI
         private string _lastCalibrationSlot = "Helm1";
         private DateTime _lastPositionChangeTime = DateTime.MinValue;
         private bool _hasPendingSave = false;
-        
+
         private readonly List<InventorySlotE> _equipmentSlots = new List<InventorySlotE>
         {
             InventorySlotE.Helm1,
@@ -161,7 +161,8 @@ namespace AutoPOE.UI
         /// <summary>
         /// Renders the calibration UI overlay.
         /// </summary>
-        public void RenderCalibrationMode()
+        /// <param name="debugInfoEndY">The Y position where debug info ends, to avoid overlap</param>
+        public void RenderCalibrationMode(float debugInfoEndY = 0)
         {
             if (_equipmentPositions == null)
             {
@@ -259,7 +260,7 @@ namespace AutoPOE.UI
 
             // Render visual overlays
             RenderEquipmentSlotOverlays(currentSlot, newPosition);
-            RenderInstructions(currentSlot, newPosition);
+            RenderInstructions(currentSlot, newPosition, debugInfoEndY);
         }
 
         private void RenderEquipmentSlotOverlays(InventorySlotE currentSlot, Vector2 newPosition)
@@ -315,25 +316,26 @@ namespace AutoPOE.UI
                 // Draw slot name
                 var textPos = new Vector2(rect.X, rect.Y - 20);
                 var textColor = isSelected ? SharpDX.Color.Yellow : new SharpDX.Color(255, 255, 255, 100);
-                _graphics.DrawText(slot.ToString(), textPos, textColor, isSelected ? 11 : 8);
+                _graphics.DrawText(slot.ToString(), textPos, textColor);
             }
         }
 
-        private void RenderInstructions(InventorySlotE currentSlot, Vector2 newPosition)
+        private void RenderInstructions(InventorySlotE currentSlot, Vector2 newPosition, float debugInfoEndY)
         {
-            // Draw instructions
-            var instructPos = new Vector2(100, 500);
-            _graphics.DrawText("=== CALIBRATION MODE ===", instructPos, SharpDX.Color.Yellow, 14);
+            // Position instructions below debug info to avoid overlap
+            var instructPos = new Vector2(100, Math.Max(500, debugInfoEndY + 20));
+
+            _graphics.DrawText("=== CALIBRATION MODE ===", instructPos, SharpDX.Color.Yellow);
             instructPos.Y += 25;
-            _graphics.DrawText($"Calibrating: {currentSlot}", instructPos, SharpDX.Color.White, 12);
+            _graphics.DrawText($"Calibrating: {currentSlot}", instructPos, SharpDX.Color.White);
             instructPos.Y += 20;
-            _graphics.DrawText($"Position: X={newPosition.X:F0}, Y={newPosition.Y:F0}", instructPos, SharpDX.Color.Cyan, 10);
+            _graphics.DrawText($"Position: X={newPosition.X:F0}, Y={newPosition.Y:F0}", instructPos, SharpDX.Color.Cyan);
             instructPos.Y += 20;
-            _graphics.DrawText("1. Select slot in settings dropdown", instructPos, SharpDX.Color.White, 10);
+            _graphics.DrawText("1. Select slot in settings dropdown", instructPos, SharpDX.Color.White);
             instructPos.Y += 18;
-            _graphics.DrawText("2. Use sliders OR arrow keys to position", instructPos, SharpDX.Color.White, 10);
+            _graphics.DrawText("2. Use sliders OR arrow keys to position", instructPos, SharpDX.Color.White);
             instructPos.Y += 18;
-            _graphics.DrawText("3. Repeat for all equipment slots", instructPos, SharpDX.Color.White, 10);
+            _graphics.DrawText("3. Repeat for all equipment slots", instructPos, SharpDX.Color.White);
         }
     }
 }

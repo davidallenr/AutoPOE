@@ -106,18 +106,19 @@ namespace AutoPOE
             }
 
             // Debug Mode Display
+            float debugEndY = drawPos.Y;
             if (Settings.Debug.EnableDebugMode)
             {
                 drawPos.Y += 40;
-                _debugRenderer.RenderDebugInfo(drawPos, _sequenceManager);
+                debugEndY = _debugRenderer.RenderDebugInfo(drawPos, _sequenceManager);
             }
 
             // Calibration Mode
             if (Settings.Calibration.CalibrateEquipment)
             {
                 _calibrationManager.Update();
-                _calibrationManager.RenderCalibrationMode();
-                
+                _calibrationManager.RenderCalibrationMode(debugEndY);
+
                 // Sync calibration positions to Core
                 Core.EquipmentSlotPositions = _calibrationManager.EquipmentPositions
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
@@ -172,20 +173,20 @@ namespace AutoPOE
 
                 // Use the StoreItemsAction logic via reflection
                 var storeAction = new Logic.Actions.StoreItemsAction();
-                
+
                 int applied = 0;
                 const int maxAttempts = 20;
-                
+
                 for (int i = 0; i < maxAttempts; i++)
                 {
                     var applyMethod = storeAction.GetType()
                         .GetMethod("ApplyAnyIncubator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    
+
                     if (applyMethod != null)
                     {
                         var task = (Task<bool>)applyMethod.Invoke(storeAction, null);
                         var success = await task;
-                        
+
                         if (success)
                         {
                             applied++;
