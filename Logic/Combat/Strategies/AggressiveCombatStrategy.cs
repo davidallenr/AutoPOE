@@ -17,7 +17,7 @@ namespace AutoPOE.Logic.Combat.Strategies
 
         private Vector2? _lastTargetPosition;
         private DateTime _lastTargetTime = DateTime.MinValue;
-        private const float TARGET_STABILITY_DURATION = 1.5f; // Seconds to stick with current target area
+        private const float TARGET_STABILITY_DURATION = 0.8f; // Reduced duration for more responsive targeting
 
         public Task<Vector2?> SelectTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters)
         {
@@ -34,6 +34,7 @@ namespace AutoPOE.Logic.Combat.Strategies
             {
                 LastTargetReason = "No valid monsters in range";
                 _lastTargetPosition = null;
+                _lastTargetTime = DateTime.MinValue; // Reset timing when no monsters
                 return Task.FromResult<Vector2?>(null);
             }
 
@@ -42,7 +43,7 @@ namespace AutoPOE.Logic.Combat.Strategies
                 DateTime.Now < _lastTargetTime.AddSeconds(TARGET_STABILITY_DURATION))
             {
                 var nearCurrentTarget = validMonsters
-                    .Where(m => m.GridPosNum.Distance(_lastTargetPosition.Value) < 25)
+                    .Where(m => m.GridPosNum.Distance(_lastTargetPosition.Value) < 20)
                     .ToList();
 
                 if (nearCurrentTarget.Any())
@@ -60,14 +61,33 @@ namespace AutoPOE.Logic.Combat.Strategies
                         return Task.FromResult<Vector2?>(stableTarget.GridPosNum);
                     }
                 }
+                else
+                {
+                    // No monsters near last target, reset timing to find new area faster
+                    _lastTargetTime = DateTime.MinValue;
+                }
+            }
+
+            // Prioritize closer targets to avoid getting stuck at map edges
+            var closeTargets = validMonsters.Where(m => m.GridPosNum.Distance(playerPos) < maxRange * 0.7f).ToList();
+            var targetsToConsider = closeTargets.Any() ? closeTargets : validMonsters;
+
+            // If we've been targeting the same area for too long without success, try closer monsters only
+            if (_lastTargetPosition.HasValue &&
+                DateTime.Now > _lastTargetTime.AddSeconds(TARGET_STABILITY_DURATION * 2) &&
+                closeTargets.Any())
+            {
+                targetsToConsider = closeTargets;
+                LastTargetReason = "Switching to closer targets due to timeout";
+                _lastTargetTime = DateTime.MinValue; // Reset timing
             }
 
             // Find new target area - center of largest group
-            var bestTarget = validMonsters
+            var bestTarget = targetsToConsider
                 .Select(m => new
                 {
                     Monster = m,
-                    NearbyCount = validMonsters.Count(other => other.GridPosNum.Distance(m.GridPosNum) < 20)
+                    NearbyCount = targetsToConsider.Count(other => other.GridPosNum.Distance(m.GridPosNum) < 20)
                 })
                 .OrderByDescending(x => x.NearbyCount) // Prefer groups
                 .ThenByDescending(x => Navigation.Map.GetMonsterRarityWeight(x.Monster.Rarity)) // Then rarity
@@ -134,8 +154,8 @@ namespace AutoPOE.Logic.Combat.Strategies
 
         public int GetMaxCombatRange()
         {
-            // Slightly longer range for aggressive builds to find more targets
-            return Math.Min(Core.Settings.CombatDistance.Value + 5, 50);
+            // Use base range for aggressive builds to avoid targeting unreachable monsters
+            return Math.Min(Core.Settings.CombatDistance.Value, 45);
         }
     }
 }

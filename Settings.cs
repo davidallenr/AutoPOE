@@ -352,6 +352,9 @@ namespace AutoPOE
             [Menu("Show Combat Debug", "Show combat strategy and targeting information.")]
             public ToggleNode ShowCombatDebug { get; set; } = new ToggleNode(true);
 
+            [Menu("Show Exploration Debug", "Show exploration pathfinding and area information.")]
+            public ToggleNode ShowExplorationDebug { get; set; } = new ToggleNode(true);
+
             [Menu("Force Apply Incubators", "Manually trigger incubator application (requires stash and inventory open).")]
             public ButtonNode ForceApplyIncubators { get; set; } = new ButtonNode();
         }

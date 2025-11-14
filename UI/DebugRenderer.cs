@@ -250,6 +250,105 @@ namespace AutoPOE.UI
                 drawPos.Y += 20;
             }
 
+            // Exploration Debug Info - Only show if enabled
+            if (_settings.Debug.ShowExplorationDebug)
+            {
+                drawPos.Y += 10; // Add spacing
+                _graphics.DrawText("=== EXPLORATION ===", drawPos, SharpDX.Color.Yellow);
+                drawPos.Y += 20;
+
+                var currentSequence = sequenceManager.GetCurrentSequence(_settings.FarmMethod.Value);
+                if (currentSequence is Logic.Sequences.SimulacrumSequence simulacrumSeq)
+                {
+                    var actionInfo = simulacrumSeq.CurrentAction?.GetType().Name ?? "None";
+                    _graphics.DrawText($"Action: {actionInfo}", drawPos, SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    // Show simulacrum center info
+                    var simulacrumCenter = Core.Map.GetSimulacrumCenter();
+                    var centerValid = simulacrumCenter != Vector2.Zero;
+                    _graphics.DrawText($"Simulacrum Center: {simulacrumCenter} (Valid: {centerValid})", drawPos,
+                        centerValid ? SharpDX.Color.LimeGreen : SharpDX.Color.Red);
+                    drawPos.Y += 20;
+
+                    // ALWAYS show target validation info (critical for debugging action transitions)
+                    var playerPos = _gameController.Player.GridPosNum;
+                    var hasValidTargets = simulacrumSeq.HasValidCombatTargets();
+                    var combatRange = simulacrumSeq.CurrentAction is Logic.Actions.CombatAction combatAction ?
+                        combatAction.CurrentStrategy?.GetMaxCombatRange() ?? Core.Settings.CombatDistance.Value :
+                        Core.Settings.CombatDistance.Value;
+
+                    _graphics.DrawText($"Valid Combat Targets: {hasValidTargets} (Range: {combatRange})", drawPos,
+                        hasValidTargets ? SharpDX.Color.LimeGreen : SharpDX.Color.Red);
+                    drawPos.Y += 20;
+
+                    // Show all monsters in range for debugging
+                    var allMonsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                        .Where(m => m.IsAlive && m.IsTargetable && m.IsHostile)
+                        .ToList();
+                    var monstersInRange = allMonsters.Count(m => m.GridPosNum.Distance(playerPos) < combatRange);
+                    var totalMonsters = allMonsters.Count;
+
+                    _graphics.DrawText($"Monsters: {monstersInRange}/{totalMonsters} in range", drawPos,
+                        monstersInRange > 0 ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    // Show strategy target selection result for debugging the mismatch
+                    if (simulacrumSeq.CurrentAction is Logic.Actions.CombatAction currentCombatAction)
+                    {
+                        var strategyReason = currentCombatAction.CurrentStrategy?.LastTargetReason ?? "N/A";
+                        var hasStrategyTarget = currentCombatAction.LastTarget.HasValue;
+
+                        _graphics.DrawText($"Strategy Target: {hasStrategyTarget} - {strategyReason}", drawPos,
+                            hasStrategyTarget ? SharpDX.Color.LimeGreen : SharpDX.Color.Orange);
+                        drawPos.Y += 20;
+                    }
+
+                    // ALWAYS show exploration state (regardless of current action)
+                    var hasPath = false;
+                    Vector2? pathTarget = null;
+                    string nextChunkInfo = "N/A";
+                    int blacklistedCount = 0;
+                    int consecutiveFailures = 0;
+
+                    if (simulacrumSeq.CurrentAction is Logic.Actions.ExploreAction exploreAction)
+                    {
+                        hasPath = exploreAction.CurrentPath != null;
+                        pathTarget = exploreAction.CurrentPath?.Next;
+                        blacklistedCount = exploreAction.BlacklistedChunkCount;
+                        consecutiveFailures = exploreAction.ConsecutiveFailures;
+                    }
+
+                    var nextChunk = Core.Map.GetNextUnrevealedChunk();
+                    nextChunkInfo = nextChunk != null ? $"{nextChunk.Position}" : "All Revealed";
+
+                    var pathInfo = hasPath ? $"Target: {pathTarget}" : "No Path";
+                    _graphics.DrawText($"Explore Path: {pathInfo}", drawPos, hasPath ? SharpDX.Color.Cyan : SharpDX.Color.Orange);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Next Chunk: {nextChunkInfo}", drawPos, nextChunk != null ? SharpDX.Color.Cyan : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    var distanceToCenter = simulacrumCenter != Vector2.Zero ? playerPos.Distance(simulacrumCenter) : 0;
+                    _graphics.DrawText($"Distance to Center: {distanceToCenter:F1}", drawPos, SharpDX.Color.Cyan);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Blacklisted Chunks: {blacklistedCount}", drawPos, SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    _graphics.DrawText($"Consecutive Failures: {consecutiveFailures}", drawPos,
+                        consecutiveFailures > 50 ? SharpDX.Color.Orange : SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+
+                    // Show warning if too many failures
+                    if (consecutiveFailures > 25)
+                    {
+                        _graphics.DrawText($"WARNING: High pathfinding failures - may be stuck!", drawPos, SharpDX.Color.Red);
+                        drawPos.Y += 20;
+                    }
+                }
+            }
+
             // Visual Debug Rendering
             if (_settings.Debug.DrawInventory)
             {

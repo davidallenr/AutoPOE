@@ -56,12 +56,33 @@ namespace AutoPOE.Logic.Actions
 
             // Always try to generate a new path if none exists
             if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
-                _currentPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
+            {
+                var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
+                // Only set the path if it was successfully created and the target isn't too far
+                if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
+                {
+                    _currentPath = newPath;
+                }
+            }
 
             if (_currentPath != null && !_currentPath.IsFinished)
-                await _currentPath.FollowPath();
+            {
+                // Validate path isn't leading to an unreachable area
+                var nextTarget = _currentPath.Next;
+                if (nextTarget.HasValue && nextTarget.Value.Distance(playerPos) > 300)
+                {
+                    // Path target is too far, abandon it
+                    _currentPath = null;
+                }
+                else
+                {
+                    await _currentPath.FollowPath();
+                }
+            }
             else
+            {
                 _currentPath = null;
+            }
 
             if (DateTime.Now > SimulacrumState.LastMovedAt.AddSeconds(2))
             {
@@ -96,9 +117,15 @@ namespace AutoPOE.Logic.Actions
             // Ensure strategy is loaded
             LoadStrategy();
 
-            // Get all valid monsters
+            var playerPos = Core.GameController.Player.GridPosNum;
+            var maxRange = _combatStrategy.GetMaxCombatRange();
+
+            // Get monsters within strategy's actual range (consistent with sequence logic)
             var monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .Where(m => m.IsAlive && m.IsTargetable)
+                .Where(m => m.IsAlive
+                    && m.IsTargetable
+                    && m.IsHostile
+                    && m.GridPosNum.Distance(playerPos) < maxRange)
                 .ToList();
 
             // Use strategy to select target
