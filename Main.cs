@@ -60,6 +60,9 @@ namespace AutoPOE
                 Graphics
             );
 
+            // Set up button callbacks
+            Settings.Debug.ForceApplyIncubators.OnPressed = () => _ = ApplyIncubatorsManually();
+
             Settings.ConfigureSkills();
             return base.Initialise();
         }
@@ -136,11 +139,81 @@ namespace AutoPOE
             // Bring window to front after area change
             await Task.Delay(100);
             // Controls.BringGameWindowToFront();
+        }
 
+        /// <summary>
+        /// Manually applies incubators from stash to equipment.
+        /// Triggered by the "Force Apply Incubators" button in debug settings.
+        /// </summary>
+        private async Task ApplyIncubatorsManually()
+        {
+            try
+            {
+                LogMessage("Manual incubator application started...");
 
+                // Validate prerequisites
+                if (!GameController.IngameState.IngameUi.StashElement.IsVisible)
+                {
+                    LogError("Stash must be open to apply incubators");
+                    return;
+                }
 
+                if (!GameController.IngameState.IngameUi.InventoryPanel.IsVisible)
+                {
+                    LogError("Inventory must be open to apply incubators");
+                    return;
+                }
 
+                if (!Core.HasIncubators)
+                {
+                    LogMessage("No incubators found in stash or inventory");
+                    return;
+                }
 
+                // Use the StoreItemsAction logic via reflection
+                var storeAction = new Logic.Actions.StoreItemsAction();
+                
+                int applied = 0;
+                const int maxAttempts = 20;
+                
+                for (int i = 0; i < maxAttempts; i++)
+                {
+                    var applyMethod = storeAction.GetType()
+                        .GetMethod("ApplyAnyIncubator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    
+                    if (applyMethod != null)
+                    {
+                        var task = (Task<bool>)applyMethod.Invoke(storeAction, null);
+                        var success = await task;
+                        
+                        if (success)
+                        {
+                            applied++;
+                            LogMessage($"Applied incubator {applied}");
+                            await Task.Delay(400);
+                        }
+                        else
+                        {
+                            LogMessage($"No more incubators to apply (applied {applied} total)");
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        LogError("Failed to access ApplyAnyIncubator method");
+                        break;
+                    }
+                }
+
+                if (applied > 0)
+                {
+                    LogMessage($"Manual incubator application complete: {applied} incubators applied");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error during manual incubator application: {ex.Message}");
+            }
         }
     }
 }

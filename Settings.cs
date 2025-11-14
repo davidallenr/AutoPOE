@@ -229,6 +229,9 @@ namespace AutoPOE
 
             [Menu("Show Inventory Debug", "Show detailed inventory information.")]
             public ToggleNode ShowInventoryDebug { get; set; } = new ToggleNode(true);
+
+            [Menu("Force Apply Incubators", "Manually trigger incubator application (requires stash and inventory open).")]
+            public ButtonNode ForceApplyIncubators { get; set; } = new ButtonNode();
         }
 
         [Submenu(CollapsedByDefault = true)]

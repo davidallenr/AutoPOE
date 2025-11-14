@@ -112,6 +112,9 @@ namespace AutoPOE.Logic.Actions
                 await Task.Delay(300);
 
                 if (!IsStashOpen) return ActionResultType.Running;
+                
+                // Wait for stash contents to load after opening
+                await Task.Delay(200);
             }
 
             // --- 3. Store Items ---
@@ -206,8 +209,34 @@ namespace AutoPOE.Logic.Actions
                     return false;
                 }
 
+                // Ensure cursor is free before attempting to pick up incubator
+                if (Core.GameController.IngameState.IngameUi.Cursor.Action != MouseActionType.Free)
+                {
+                    Core.Plugin.LogError($"Cursor not free before picking incubator (state: {Core.GameController.IngameState.IngameUi.Cursor.Action})");
+                    await Controls.UseKey(Keys.Escape);
+                    await Task.Delay(200);
+                    
+                    // Check again after escape
+                    if (Core.GameController.IngameState.IngameUi.Cursor.Action != MouseActionType.Free)
+                    {
+                        Core.Plugin.LogError("Failed to free cursor - aborting incubator application");
+                        return false;
+                    }
+                }
+
+                // Small delay to ensure game is ready for interaction
+                await Task.Delay(100);
+
+                Core.Plugin.LogMessage($"Attempting to right-click incubator at position ({incubatorToApply.Value.X}, {incubatorToApply.Value.Y})");
+
                 // Right-click incubator in stash
                 await Controls.ClickScreenPos(incubatorToApply.Value, false, true);
+                
+                // Give more time for the cursor state to change
+                await Task.Delay(150);
+                
+                Core.Plugin.LogMessage($"After right-click, cursor state: {Core.GameController.IngameState.IngameUi.Cursor.Action}");
+                
                 if (!await WaitForCursorState(MouseActionType.UseItem, 2000))
                 {
                     Core.Plugin.LogError("Failed to pick up incubator - cursor didn't change to UseItem");
@@ -309,20 +338,47 @@ namespace AutoPOE.Logic.Actions
             try
             {
                 if (!IsStashOpen)
+                {
+                    Core.Plugin.LogError("FindIncubatorInStash: Stash not open");
                     return null;
+                }
 
                 var visibleStash = Core.GameController.IngameState.IngameUi.StashElement.VisibleStash;
                 if (visibleStash == null)
+                {
+                    Core.Plugin.LogError("FindIncubatorInStash: VisibleStash is null");
                     return null;
+                }
 
-                var incubator = visibleStash.VisibleInventoryItems
-                    ?.FirstOrDefault(item => item?.TextureName != null && item.TextureName.Contains("Incubation/"));
+                var visibleItems = visibleStash.VisibleInventoryItems;
+                if (visibleItems == null)
+                {
+                    Core.Plugin.LogError("FindIncubatorInStash: VisibleInventoryItems is null");
+                    return null;
+                }
+
+                Core.Plugin.LogMessage($"FindIncubatorInStash: Scanning {visibleItems.Count} items in stash");
+
+                // Use the same detection logic as UpdateIncubatorStatus
+                var incubator = visibleItems
+                    .FirstOrDefault(item => item?.Item != null && (
+                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))));
 
                 if (incubator == null)
+                {
+                    Core.Plugin.LogMessage("FindIncubatorInStash: No incubator found in visible items");
                     return null;
+                }
 
-                var center = incubator.GetClientRect().Center;
-                return new Vector2(center.X, center.Y);
+                var rect = incubator.GetClientRect();
+                var center = rect.Center;
+                var position = new Vector2(center.X, center.Y);
+                
+                Core.Plugin.LogMessage($"FindIncubatorInStash: Found incubator at position ({position.X}, {position.Y}), rect: {rect.Width}x{rect.Height}");
+                Core.Plugin.LogMessage($"FindIncubatorInStash: Incubator Path: {incubator.Item.Path}");
+                
+                return position;
             }
             catch (Exception ex)
             {
