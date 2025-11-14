@@ -17,7 +17,7 @@ namespace AutoPOE
         private bool _wasInSimulacrum = false;
 
         // Managers
-        private SequenceManager _sequenceManager;
+        public SequenceManager _sequenceManager; // Made public for debug access
         private EquipmentCalibrationManager _calibrationManager;
         private DebugRenderer _debugRenderer;
         private SimulacrumStatsRenderer _simulacrumStatsRenderer;
@@ -109,7 +109,7 @@ namespace AutoPOE
             if (Settings.Debug.EnableDebugMode)
             {
                 drawPos.Y += 40;
-                _debugRenderer.RenderDebugInfo(drawPos);
+                _debugRenderer.RenderDebugInfo(drawPos, _sequenceManager);
             }
 
             // Calibration Mode

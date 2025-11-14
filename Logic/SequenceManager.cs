@@ -13,6 +13,20 @@ namespace AutoPOE.Logic
         private ISequence? _scarabTraderSequence;
         private ISequence? _debugSequence;
 
+        /// <summary>
+        /// Gets the currently active sequence based on farm method
+        /// </summary>
+        public ISequence? GetCurrentSequence(string farmMethod)
+        {
+            return farmMethod switch
+            {
+                "Simulacrum" => _simulacrumSequence,
+                "ScarabTrader" => _scarabTraderSequence,
+                "Debug" => _debugSequence,
+                _ => null
+            };
+        }
+
         public SequenceManager()
         {
             InitializeSequences();

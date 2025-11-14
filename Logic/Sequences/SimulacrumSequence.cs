@@ -11,6 +11,16 @@ namespace AutoPOE.Logic.Sequences
     {
         private Task<ActionResultType> _currentTask;
         private IAction _currentAction;
+        
+        // Cache actions to avoid recreating them
+        private readonly CombatAction _combatAction = new CombatAction();
+        private readonly ExploreAction _exploreAction = new ExploreAction();
+        private readonly IdleAction _idleAction = new IdleAction();
+
+        /// <summary>
+        /// Gets the current action for debugging
+        /// </summary>
+        public IAction CurrentAction => _currentAction;
 
         public void Tick()
         {
@@ -57,12 +67,12 @@ namespace AutoPOE.Logic.Sequences
                 return new StoreItemsAction();
 
             if (SimulacrumState.IsWaveActive && Core.Map.ClosestValidGroundItem == null)
-                return Core.Map.ClosestTargetableMonster != null ? new CombatAction() : new ExploreAction();
+                return Core.Map.ClosestTargetableMonster != null ? _combatAction : _exploreAction;
 
             else if (DateTime.Now > SimulacrumState.CanStartWaveAt && Core.Map.ClosestValidGroundItem == null)
                 return SimulacrumState.CurrentWave < 15 ? new StartWaveAction() : new LeaveMapAction();
 
-            return new IdleAction();
+            return _idleAction;
         }
 
 

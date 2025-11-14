@@ -1,4 +1,6 @@
-﻿using ExileCore.PoEMemory.Components;
+﻿using AutoPOE.Logic.Combat;
+using AutoPOE.Logic.Combat.Strategies;
+using ExileCore.PoEMemory.Components;
 using ExileCore.Shared.Enums;
 using ExileCore.Shared.Helpers;
 using System.Numerics;
@@ -13,6 +15,34 @@ namespace AutoPOE.Logic.Actions
         private Navigation.Path? _currentPath;
         private (Vector2 Position, float Weight) _bestFightPos;
         private const float RepositionThreshold = 1.25f;
+        private ICombatStrategy _combatStrategy;
+        private Vector2? _lastTarget;
+        private string _loadedStrategyName = "";
+
+        public CombatAction()
+        {
+            // Initialize with default strategy
+            LoadStrategy();
+        }
+
+        private void LoadStrategy()
+        {
+            // Load strategy based on settings
+            var strategyName = Core.Settings.Combat.Strategy.Value;
+            
+            // Only reload if strategy changed
+            if (_loadedStrategyName == strategyName && _combatStrategy != null)
+                return;
+            
+            _combatStrategy = strategyName switch
+            {
+                "Cast on Crit" => new StandardCombatStrategy(), // TODO: Implement CastOnCritStrategy
+                _ => new StandardCombatStrategy()
+            };
+            
+            _loadedStrategyName = strategyName;
+            Core.Plugin.LogMessage($"Loaded combat strategy: {_combatStrategy.Name}");
+        }
 
         public async Task<ActionResultType> Tick()
         {
@@ -77,12 +107,24 @@ namespace AutoPOE.Logic.Actions
 
         private async Task<bool> CastTargetMonsterSpells()
         {
-            var bestTarget = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .Where(m => m.IsHostile && m.IsTargetable && m.IsAlive && m.GridPosNum.Distance(Core.GameController.Player.GridPosNum) < Core.Settings.CombatDistance)
-                .OrderByDescending(m => Navigation.Map.GetMonsterRarityWeight(m.Rarity))
-                .FirstOrDefault();
-            if (bestTarget == null) return false;
+            // Get all valid monsters
+            var monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                .Where(m => m.IsAlive && m.IsTargetable)
+                .ToList();
 
+            // Use strategy to select target
+            var targetPos = await _combatStrategy.SelectTarget(monsters);
+            _lastTarget = targetPos;
+
+            if (targetPos == null)
+                return false;
+
+            // Find the actual target entity for rarity-based skill selection
+            var bestTarget = monsters
+                .FirstOrDefault(m => m.GridPosNum == targetPos.Value);
+
+            if (bestTarget == null)
+                return false;
 
             var skills = Core.Settings.GetAvailableMonsterTargetingSkills()
                 .OrderBy(I=> _random.Next())
@@ -106,7 +148,7 @@ namespace AutoPOE.Logic.Actions
             var skill = skills.FirstOrDefault();
             if (skill == null) return false;
             skill.NextCast = DateTime.Now.AddMilliseconds(skill.MinimumDelay.Value);
-            await Controls.UseKeyAtGridPos(bestTarget.GridPosNum, skill.Hotkey.Value);
+            await Controls.UseKeyAtGridPos(targetPos.Value, skill.Hotkey.Value);
             return true;
         }
 
@@ -116,7 +158,22 @@ namespace AutoPOE.Logic.Actions
             _currentPath?.Render();
             if (_bestFightPos.Position != Vector2.Zero)
                 Core.Graphics.DrawCircle(Controls.GetScreenClampedGridPos(_bestFightPos.Position), 15, SharpDX.Color.Yellow, 3);
+            
+            // Draw target indicator
+            if (_lastTarget.HasValue)
+            {
+                Core.Graphics.DrawCircle(Controls.GetScreenClampedGridPos(_lastTarget.Value), 10, SharpDX.Color.Red, 3);
+            }
         }
 
+        /// <summary>
+        /// Gets the current combat strategy for debugging
+        /// </summary>
+        public ICombatStrategy CurrentStrategy => _combatStrategy;
+
+        /// <summary>
+        /// Gets the last targeted position for debugging
+        /// </summary>
+        public Vector2? LastTarget => _lastTarget;
     }
 }

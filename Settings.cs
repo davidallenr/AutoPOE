@@ -62,6 +62,7 @@ namespace AutoPOE
         public HotkeyNode DetonateMinesKey { get; set; } = (HotkeyNode)Keys.D;
         public ToggleNode ShouldDetonateMines { get; set; } = new ToggleNode(false);
 
+        public CombatSettings Combat { get; set; } = new CombatSettings();
 
         public Skill Skill1 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.Q };
         public Skill Skill2 { get; set; } = new Skill { Hotkey = (HotkeyNode)Keys.W };
@@ -210,7 +211,20 @@ namespace AutoPOE
             }
         }
 
+        [Submenu]
+        public class CombatSettings
+        {
+            public CombatSettings()
+            {
+                Strategy.SetListValues(new List<string> { "Standard", "Cast on Crit" });
+            }
 
+            [Menu("Combat Strategy", "Select your build's combat style.")]
+            public ListNode Strategy { get; set; } = new ListNode() { Value = "Standard" };
+
+            [Menu("Enable Target Priorities", "Use advanced target selection rules (future feature).")]
+            public ToggleNode EnableTargetPriorities { get; set; } = new ToggleNode(false);
+        }
 
         [Submenu(CollapsedByDefault = true)]
         public class DebugSettings
@@ -229,6 +243,9 @@ namespace AutoPOE
 
             [Menu("Show Inventory Debug", "Show detailed inventory information.")]
             public ToggleNode ShowInventoryDebug { get; set; } = new ToggleNode(true);
+
+            [Menu("Show Combat Debug", "Show combat strategy and targeting information.")]
+            public ToggleNode ShowCombatDebug { get; set; } = new ToggleNode(true);
 
             [Menu("Force Apply Incubators", "Manually trigger incubator application (requires stash and inventory open).")]
             public ButtonNode ForceApplyIncubators { get; set; } = new ButtonNode();
