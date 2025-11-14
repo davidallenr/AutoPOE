@@ -22,6 +22,7 @@ namespace AutoPOE
         // UI managers
         private EquipmentCalibrationManager _calibrationManager;
         private DebugRenderer _debugRenderer;
+        private SimulacrumStatsRenderer _simulacrumStatsRenderer;
 
         private ISequence _scarabTraderSequence = new ScarabTraderSequence();
         private ISequence _debugSequence = new DebugSequence();
@@ -54,6 +55,12 @@ namespace AutoPOE
                 Graphics,
                 Settings,
                 _calibrationManager
+            );
+
+            // Initialize Simulacrum stats renderer
+            _simulacrumStatsRenderer = new SimulacrumStatsRenderer(
+                GameController,
+                Graphics
             );
 
             Settings.ConfigureSkills();
@@ -114,19 +121,11 @@ namespace AutoPOE
 
             var drawPos = new System.Numerics.Vector2(100, 200);
 
+            // Simulacrum stats display
             if (Core.Settings.FarmMethod == "Simulacrum")
             {
-                if (!GameController.Area.CurrentArea.IsHideout)
-                {
-                    Graphics.DrawText($"Current Wave: {SimulacrumState.CurrentWave} / 15", drawPos, SharpDX.Color.White);
-                    drawPos.Y += 20;
-                    Graphics.DrawText($"Current Duration: {SimulacrumState.CurrentRunDuration:mm\\:ss}", drawPos, SharpDX.Color.White);
-                    drawPos.Y += 20;
-                }
-
-                Graphics.DrawText($"Total Runs: {SimulacrumState.TotalRunsCompleted}", drawPos, SharpDX.Color.White);
-                drawPos.Y += 20;
-                Graphics.DrawText($"Avg. Time: {TimeSpan.FromSeconds(SimulacrumState.AverageTimePerRun):mm\\:ss}", drawPos, SharpDX.Color.White);
+                _simulacrumStatsRenderer.RenderStats(drawPos);
+                drawPos.Y += 100; // Adjust position for debug info below
             }
 
             // Debug Mode Display
