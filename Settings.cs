@@ -220,6 +220,15 @@ namespace AutoPOE
 
             [Menu("Draw Inventory Items", "Draw boxes around items and equipment slots.")]
             public ToggleNode DrawInventory { get; set; } = new ToggleNode(false);
+
+            [Menu("Show Item Details", "Show Path and Metadata for first items in stash/inventory.")]
+            public ToggleNode ShowItemDetails { get; set; } = new ToggleNode(false);
+
+            [Menu("Show Stash Debug", "Show detailed stash information when stash is open.")]
+            public ToggleNode ShowStashDebug { get; set; } = new ToggleNode(true);
+
+            [Menu("Show Inventory Debug", "Show detailed inventory information.")]
+            public ToggleNode ShowInventoryDebug { get; set; } = new ToggleNode(true);
         }
 
         [Submenu(CollapsedByDefault = true)]
