@@ -46,6 +46,30 @@ namespace AutoPOE.Logic.Actions
             return Core.EquipmentSlotPositions ?? DefaultEquipmentSlotPositions;
         }
 
+        /// <summary>
+        /// Validates that we have positions for all required equipment slots
+        /// </summary>
+        private static bool ValidateEquipmentPositions()
+        {
+            var positions = GetEquipmentSlotPositions();
+            var requiredSlots = new[]
+            {
+                InventorySlotE.BodyArmour1, InventorySlotE.Weapon1, InventorySlotE.Offhand1,
+                InventorySlotE.Helm1, InventorySlotE.Amulet1, InventorySlotE.Ring1,
+                InventorySlotE.Ring2, InventorySlotE.Gloves1, InventorySlotE.Boots1, InventorySlotE.Belt1
+            };
+
+            foreach (var slot in requiredSlots)
+            {
+                if (!positions.ContainsKey(slot))
+                {
+                    Core.Plugin.LogError($"Missing calibrated position for {slot}");
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public async Task<ActionResultType> Tick()
         {
             if (SimulacrumState.StoreItemAttemptCount > 100)
@@ -132,9 +156,26 @@ namespace AutoPOE.Logic.Actions
             // --- 4. Apply Incubators ---
             if (Core.Settings.UseIncubators)
             {
-                while (await ApplyAnyIncubator())
+                // Validate equipment positions before attempting to apply incubators
+                if (!ValidateEquipmentPositions())
                 {
-                    await Task.Delay(400);
+                    Core.Plugin.LogMessage("Skipping incubator application - equipment positions not calibrated");
+                }
+                else
+                {
+                    int incubatorAttempts = 0;
+                    const int maxIncubatorAttempts = 20; // Prevent infinite loops
+
+                    while (incubatorAttempts < maxIncubatorAttempts && await ApplyAnyIncubator())
+                    {
+                        await Task.Delay(400);
+                        incubatorAttempts++;
+                    }
+
+                    if (incubatorAttempts >= maxIncubatorAttempts)
+                    {
+                        Core.Plugin.LogMessage($"Reached max incubator attempts ({maxIncubatorAttempts})");
+                    }
                 }
             }
 
@@ -150,29 +191,69 @@ namespace AutoPOE.Logic.Actions
 
         private async Task<bool> ApplyAnyIncubator()
         {
-            var incubatorToApply = FindIncubatorInStash();
-            var targetSlot = FindEmptyEquipmentSlot();
-
-            if (incubatorToApply == null || targetSlot == null)
-                return false;
-
-            await Controls.ClickScreenPos(incubatorToApply.Value, false, true);
-            if (!await WaitForCursorState(MouseActionType.UseItem, 2000))
-                return false;
-
-            var equipmentPositions = GetEquipmentSlotPositions();
-            await Controls.ClickScreenPos(equipmentPositions[targetSlot.Value]);
-
-            if (Core.GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.HoldItem)
+            try
             {
-                Core.IsBotRunning = false;
+                var incubatorToApply = FindIncubatorInStash();
+                var targetSlot = FindEmptyEquipmentSlot();
+
+                if (incubatorToApply == null || targetSlot == null)
+                    return false;
+
+                // Validate we have inventory panel open
+                if (!Core.GameController.IngameState.IngameUi.InventoryPanel.IsVisible)
+                {
+                    Core.Plugin.LogError("Inventory panel not visible when trying to apply incubator");
+                    return false;
+                }
+
+                // Right-click incubator in stash
+                await Controls.ClickScreenPos(incubatorToApply.Value, false, true);
+                if (!await WaitForCursorState(MouseActionType.UseItem, 2000))
+                {
+                    Core.Plugin.LogError("Failed to pick up incubator - cursor didn't change to UseItem");
+                    return false;
+                }
+
+                // Click equipment slot
+                var equipmentPositions = GetEquipmentSlotPositions();
+                if (!equipmentPositions.ContainsKey(targetSlot.Value))
+                {
+                    Core.Plugin.LogError($"No calibrated position for slot {targetSlot.Value}");
+                    // Cancel held item
+                    await Controls.UseKey(Keys.Escape);
+                    return false;
+                }
+
+                await Controls.ClickScreenPos(equipmentPositions[targetSlot.Value]);
+
+                // Check if we're still holding an item (application failed)
+                if (Core.GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.HoldItem
+                    || Core.GameController.IngameState.IngameUi.Cursor.Action == MouseActionType.UseItem)
+                {
+                    Core.Plugin.LogError($"Failed to apply incubator to {targetSlot.Value} - cancelling");
+                    await Controls.UseKey(Keys.Escape);
+                    await Task.Delay(100);
+                    return false;
+                }
+
+                if (!await WaitForCursorState(MouseActionType.Free, 2000))
+                {
+                    Core.Plugin.LogError("Cursor didn't return to Free state after applying incubator");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Core.Plugin.LogError($"ApplyAnyIncubator error: {ex.Message}");
+                // Try to cancel any held item
+                if (Core.GameController.IngameState.IngameUi.Cursor.Action != MouseActionType.Free)
+                {
+                    await Controls.UseKey(Keys.Escape);
+                }
                 return false;
             }
-
-            if (!await WaitForCursorState(MouseActionType.Free, 2000))
-                return false;
-
-            return true;
         }
 
         private async Task<bool> WaitForCursorState(MouseActionType expectedState, int timeoutMs)
@@ -184,35 +265,70 @@ namespace AutoPOE.Logic.Actions
                 {
                     return true;
                 }
-                await Task.Delay(Core.Settings.ActionFrequency);
+                await Task.Delay(50); // Poll more frequently than action frequency for cursor state
             }
             return false;
         }
 
         private InventorySlotE? FindEmptyEquipmentSlot()
         {
-            var equipment = Core.GameController.IngameState.ServerData.PlayerInventories
-                .Where(inv => inv.Inventory.InventSlot >= InventorySlotE.BodyArmour1
-                            && inv.Inventory.InventSlot <= InventorySlotE.Belt1
-                            && inv.Inventory.Items.Count == 1)
-                .Select(inv => inv.Inventory)
-                .ToList();
-
-            foreach (var equip in equipment)
+            try
             {
-                var incubatorName = equip.Items.FirstOrDefault()?.GetComponent<Mods>()?.IncubatorName;
-                if (string.IsNullOrEmpty(incubatorName))
-                    return equip.InventSlot;
+                var equipment = Core.GameController.IngameState.ServerData.PlayerInventories
+                    .Where(inv => inv?.Inventory != null
+                                && inv.Inventory.InventSlot >= InventorySlotE.BodyArmour1
+                                && inv.Inventory.InventSlot <= InventorySlotE.Belt1
+                                && inv.Inventory.Items.Count == 1)
+                    .Select(inv => inv.Inventory)
+                    .ToList();
+
+                // Check if we have calibrated positions for this slot
+                var equipmentPositions = GetEquipmentSlotPositions();
+
+                foreach (var equip in equipment)
+                {
+                    // Skip if we don't have a calibrated position for this slot
+                    if (!equipmentPositions.ContainsKey(equip.InventSlot))
+                        continue;
+
+                    var incubatorName = equip.Items.FirstOrDefault()?.GetComponent<Mods>()?.IncubatorName;
+                    if (string.IsNullOrEmpty(incubatorName))
+                        return equip.InventSlot;
+                }
             }
+            catch (Exception ex)
+            {
+                Core.Plugin.LogError($"FindEmptyEquipmentSlot error: {ex.Message}");
+            }
+
             return null;
         }
 
         private Vector2? FindIncubatorInStash()
         {
-            var center = Core.GameController.IngameState.IngameUi.StashElement.VisibleStash?.VisibleInventoryItems
-                .FirstOrDefault(item => item.TextureName.Contains("Incubation/"))?.GetClientRect().Center;
+            try
+            {
+                if (!IsStashOpen)
+                    return null;
 
-            return center == null ? null : new Vector2(center.Value.X, center.Value.Y);
+                var visibleStash = Core.GameController.IngameState.IngameUi.StashElement.VisibleStash;
+                if (visibleStash == null)
+                    return null;
+
+                var incubator = visibleStash.VisibleInventoryItems
+                    ?.FirstOrDefault(item => item?.TextureName != null && item.TextureName.Contains("Incubation/"));
+
+                if (incubator == null)
+                    return null;
+
+                var center = incubator.GetClientRect().Center;
+                return new Vector2(center.X, center.Y);
+            }
+            catch (Exception ex)
+            {
+                Core.Plugin.LogError($"FindIncubatorInStash error: {ex.Message}");
+                return null;
+            }
         }
 
         public void Render() { }

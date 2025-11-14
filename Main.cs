@@ -19,7 +19,7 @@ namespace AutoPOE
         private ISequence? _sequence;
 
         // Equipment calibration
-        private Dictionary<InventorySlotE, System.Numerics.Vector2> _equipmentPositions;
+        private Dictionary<InventorySlotE, System.Numerics.Vector2> _equipmentPositions = new Dictionary<InventorySlotE, System.Numerics.Vector2>();
         private int _selectedSlotIndex = 0;
         private string _lastCalibrationSlot = "Helm1";
         private DateTime _lastPositionChangeTime = DateTime.MinValue;
@@ -257,6 +257,12 @@ namespace AutoPOE
 
         private void RenderCalibrationMode()
         {
+            if (_equipmentPositions == null)
+            {
+                LogError("Equipment positions not initialized in RenderCalibrationMode");
+                return;
+            }
+
             var inventoryPanel = GameController.IngameState.IngameUi.InventoryPanel;
             if (inventoryPanel == null || !inventoryPanel.IsVisible)
             {
@@ -265,7 +271,24 @@ namespace AutoPOE
 
             // Get the currently selected slot from settings
             var selectedSlotName = Settings.Calibration.CalibrationSlot.Value;
-            var currentSlot = (InventorySlotE)Enum.Parse(typeof(InventorySlotE), selectedSlotName);
+            if (string.IsNullOrEmpty(selectedSlotName))
+            {
+                LogError("CalibrationSlot value is null or empty");
+                return;
+            }
+
+            if (!Enum.TryParse<InventorySlotE>(selectedSlotName, out var currentSlot))
+            {
+                LogError($"Failed to parse slot name: {selectedSlotName}");
+                return;
+            }
+
+            // Ensure the slot exists in the dictionary
+            if (!_equipmentPositions.ContainsKey(currentSlot))
+            {
+                // Initialize with default position if missing
+                _equipmentPositions[currentSlot] = new System.Numerics.Vector2(1585, 300);
+            }
 
             // Check if the user changed the selected slot in the dropdown
             if (selectedSlotName != _lastCalibrationSlot)
@@ -337,6 +360,10 @@ namespace AutoPOE
             // Draw all equipment slots with a faded overlay
             foreach (var slot in _equipmentSlots)
             {
+                // Skip if slot isn't in the dictionary yet
+                if (!_equipmentPositions.ContainsKey(slot))
+                    continue;
+
                 var position = _equipmentPositions[slot];
                 var isSelected = slot == currentSlot;
 
@@ -401,6 +428,9 @@ namespace AutoPOE
 
         private void RenderInventoryItems()
         {
+            if (_equipmentPositions == null)
+                return;
+
             var inventoryPanel = GameController.IngameState.IngameUi.InventoryPanel;
             if (inventoryPanel == null || !inventoryPanel.IsVisible)
                 return;

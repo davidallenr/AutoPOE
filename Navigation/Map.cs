@@ -102,13 +102,22 @@ namespace AutoPOE.Navigation
                     );
 
                     if (!string.IsNullOrEmpty(tilePath))
-                        tiles.GetOrAdd(tilePath, _ => new List<Vector2>())
-                        .Add(tileGridPosition);
+                    {
+                        var list = tiles.GetOrAdd(tilePath, _ => new List<Vector2>());
+                        lock (list)
+                        {
+                            list.Add(tileGridPosition);
+                        }
+                    }
 
                     if (!string.IsNullOrEmpty(detailName))
-                        tiles.GetOrAdd(detailName, _ => new List<Vector2>())
-                        .Add(tileGridPosition);
-
+                    {
+                        var list = tiles.GetOrAdd(detailName, _ => new List<Vector2>());
+                        lock (list)
+                        {
+                            list.Add(tileGridPosition);
+                        }
+                    }
                 }
             });
         }

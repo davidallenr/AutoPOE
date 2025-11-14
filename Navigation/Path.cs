@@ -64,12 +64,16 @@ namespace AutoPOE.Navigation
         public void Render()
         {
             if (IsFinished) return;
+            
+            // Create a copy to avoid index out of range if the list is modified during rendering
+            var nodesCopy = _nodes.ToList();
+            if (nodesCopy.Count < 2) return;
+            
             var camera = Core.GameController.IngameState.Camera;
-            for (int i = 0; i < _nodes.Count - 1; i++)
+            for (int i = 0; i < nodesCopy.Count - 1; i++)
             {
-                
-                var p1 = Controls.GetScreenByGridPos(_nodes[i]);
-                var p2 = Controls.GetScreenByGridPos(_nodes[i + 1]);
+                var p1 = Controls.GetScreenByGridPos(nodesCopy[i]);
+                var p2 = Controls.GetScreenByGridPos(nodesCopy[i + 1]);
                 Core.Graphics.DrawLine(p1, p2, 2, SharpDX.Color.White);
             }
         }
