@@ -70,6 +70,18 @@ namespace AutoPOE.UI
             _graphics.DrawText($"In Hideout: {_gameController.Area.CurrentArea.IsHideout}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
 
+            // Current Action Info (general, applies to all actions)
+            var generalSequence = sequenceManager.GetCurrentSequence(_settings.FarmMethod.Value);
+            if (generalSequence is Logic.Sequences.SimulacrumSequence generalSimSeq)
+            {
+                var actionInfo = generalSimSeq.CurrentAction?.GetType().Name ?? "None";
+                _graphics.DrawText($"Current Action: {actionInfo}", drawPos,
+                    actionInfo == "CombatAction" ? SharpDX.Color.Red :
+                    actionInfo == "ExploreAction" ? SharpDX.Color.Yellow :
+                    actionInfo == "IdleAction" ? SharpDX.Color.Gray : SharpDX.Color.Cyan);
+                drawPos.Y += 20;
+            }
+
             _graphics.DrawText($"Current Area: {_gameController.Area.CurrentArea.DisplayName}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
 
@@ -89,18 +101,6 @@ namespace AutoPOE.UI
             if (Core.Settings.FarmMethod.Value == "Simulacrum")
             {
                 _graphics.DrawText($"Has Incubators: {Core.HasIncubators}", drawPos, Core.HasIncubators ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
-                drawPos.Y += 20;
-            }
-
-            // Current Action Info (general, applies to all actions)
-            var generalSequence = sequenceManager.GetCurrentSequence(_settings.FarmMethod.Value);
-            if (generalSequence is Logic.Sequences.SimulacrumSequence generalSimSeq)
-            {
-                var actionInfo = generalSimSeq.CurrentAction?.GetType().Name ?? "None";
-                _graphics.DrawText($"Current Action: {actionInfo}", drawPos,
-                    actionInfo == "CombatAction" ? SharpDX.Color.Red :
-                    actionInfo == "ExploreAction" ? SharpDX.Color.Yellow :
-                    actionInfo == "IdleAction" ? SharpDX.Color.Gray : SharpDX.Color.Cyan);
                 drawPos.Y += 20;
             }
 

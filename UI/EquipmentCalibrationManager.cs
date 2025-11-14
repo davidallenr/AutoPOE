@@ -323,7 +323,7 @@ namespace AutoPOE.UI
         private void RenderInstructions(InventorySlotE currentSlot, Vector2 newPosition, float debugInfoEndY)
         {
             // Position instructions below debug info to avoid overlap
-            var instructPos = new Vector2(100, Math.Max(500, debugInfoEndY + 20));
+            var instructPos = new Vector2(50, Math.Max(500, debugInfoEndY + 20));
 
             _graphics.DrawText("=== CALIBRATION MODE ===", instructPos, SharpDX.Color.Yellow);
             instructPos.Y += 25;

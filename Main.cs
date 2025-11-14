@@ -99,20 +99,20 @@ namespace AutoPOE
 
             _sequenceManager.Render(Core.Settings.FarmMethod);
 
-            var drawPos = new System.Numerics.Vector2(100, 200);
+            var drawPos = new System.Numerics.Vector2(450, 100);
 
             // Simulacrum stats display
             if (Core.Settings.FarmMethod == "Simulacrum")
             {
                 _simulacrumStatsRenderer.RenderStats(drawPos);
-                drawPos.Y += 100; // Adjust position for debug info below
+                drawPos.X -= 400; // Adjust position for debug info below
             }
 
             // Debug Mode Display
             float debugEndY = drawPos.Y;
             if (Settings.Debug.EnableDebugMode)
             {
-                drawPos.Y += 40;
+                // drawPos.Y += 280;
                 debugEndY = _debugRenderer.RenderDebugInfo(drawPos, _sequenceManager);
             }
 
