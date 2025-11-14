@@ -58,6 +58,39 @@ namespace AutoPOE.Logic.Actions
             Core.Map.UpdateRevealedChunks();
             var playerPos = Core.GameController.Player.GridPosNum;
 
+            // First priority: Check if there are any enemies nearby that we should move toward
+            var nearbyEnemies = GetNearbyEnemiesOutOfRange();
+            if (nearbyEnemies.Any())
+            {
+                var closestEnemy = nearbyEnemies
+                    .OrderBy(e => e.GridPosNum.Distance(playerPos))
+                    .First();
+
+                var targetPos = closestEnemy.GridPosNum;
+                var distance = targetPos.Distance(playerPos);
+
+                // If we're already close enough to this enemy, let combat action handle it
+                if (distance <= Core.Settings.CombatDistance.Value)
+                {
+                    return ActionResultType.Success; // Let combat take over
+                }
+
+                // Move toward the enemy
+                if (_currentPath == null || _currentPath.IsFinished ||
+                    (_currentPath.Next.HasValue && _currentPath.Next.Value.Distance(targetPos) > 20))
+                {
+                    _currentPath = Core.Map.FindPath(playerPos, targetPos);
+                }
+
+                if (_currentPath != null)
+                {
+                    await _currentPath.FollowPath();
+                    _consecutiveFailures = 0;
+                    return ActionResultType.Running;
+                }
+            }
+
+            // Second priority: Handle stuck situations with movement skill
             if (DateTime.Now > SimulacrumState.LastMovedAt.AddSeconds(2))
             {
                 var nextPos = Core.GameController.Player.GridPosNum + new Vector2(_random.Next(-50, 50), _random.Next(-50, 50));
@@ -141,6 +174,24 @@ namespace AutoPOE.Logic.Actions
             }
 
             return ActionResultType.Running;
+        }
+
+        /// <summary>
+        /// Gets enemies that are visible but outside of combat range
+        /// </summary>
+        private List<ExileCore.PoEMemory.MemoryObjects.Entity> GetNearbyEnemiesOutOfRange()
+        {
+            var playerPos = Core.GameController.Player.GridPosNum;
+            var combatRange = Core.Settings.CombatDistance.Value;
+            var searchRange = Math.Min(combatRange * 3, 150); // Look further than combat range but not too far
+
+            var nearbyEnemies = Core.GameController.EntityListWrapper.ValidEntitiesByType[ExileCore.Shared.Enums.EntityType.Monster]
+                .Where(m => m.IsHostile && m.IsTargetable && m.IsAlive)
+                .Where(m => m.GridPosNum.Distance(playerPos) > combatRange) // Outside combat range
+                .Where(m => m.GridPosNum.Distance(playerPos) <= searchRange) // But within search range
+                .ToList();
+
+            return nearbyEnemies;
         }
 
         public void Render()
