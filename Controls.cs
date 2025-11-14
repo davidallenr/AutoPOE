@@ -59,6 +59,24 @@ namespace AutoPOE
 
             return isKeyDown;
         }
+
+        /// <summary>
+        /// Clamps a position to ensure it's within the game window bounds
+        /// Prevents clicks outside the window in windowed mode
+        /// </summary>
+        private static Vector2 ClampPositionToWindow(Vector2 position)
+        {
+            var windowRect = Core.GameController.Window.GetWindowRectangle();
+            
+            // Add small margins to ensure we stay well within bounds
+            const float margin = 5f;
+            
+            var clampedX = Math.Max(margin, Math.Min(position.X, windowRect.Width - margin));
+            var clampedY = Math.Max(margin, Math.Min(position.Y, windowRect.Height - margin));
+            
+            return new Vector2(clampedX, clampedY);
+        }
+
         public static async Task ClosePanels()
         {
             if (ReleaseAllModifierKeys())
@@ -71,9 +89,13 @@ namespace AutoPOE
 
         /// <summary>
         /// Sets cursor position relative to the game window, making it resolution and window position independent
+        /// Automatically clamps the position to stay within window bounds
         /// </summary>
         private static void SetCursorPosWindowAware(Vector2 position)
         {
+            // Clamp position to window bounds before converting to absolute coordinates
+            position = ClampPositionToWindow(position);
+            
             var windowRect = Core.GameController.Window.GetWindowRectangle();
             var absoluteX = (int)(windowRect.X + position.X);
             var absoluteY = (int)(windowRect.Y + position.Y);

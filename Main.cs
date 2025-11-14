@@ -104,7 +104,7 @@ namespace AutoPOE
             {
                 drawPos.Y += 40;
                 _debugRenderer.RenderDebugInfo(drawPos);
-            } e
+            }
 
             // Calibration Mode
             if (Settings.Calibration.CalibrateEquipment)

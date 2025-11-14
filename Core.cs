@@ -38,7 +38,20 @@ namespace AutoPOE
         }
 
 
-        public static bool CanUseAction => DateTime.Now > _nextAction;
+        /// <summary>
+        /// Checks if the game window is currently in the foreground (focused)
+        /// </summary>
+        public static bool IsGameWindowForeground()
+        {
+            return GameController?.Window?.Process?.MainWindowHandle != IntPtr.Zero &&
+                   GameController.Window.IsForeground();
+        }
+
+        /// <summary>
+        /// Checks if an action can be performed (timing + window focus)
+        /// </summary>
+        public static bool CanUseAction => DateTime.Now > _nextAction && IsGameWindowForeground();
+
         public static void ActionPerformed()
         {
             _nextAction = DateTime.Now.AddMilliseconds(Settings.ActionFrequency);
