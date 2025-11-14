@@ -48,7 +48,6 @@ namespace AutoPOE.Logic.Actions
         {
             await DetonateMines();
             await CastTargetSelfSpells();
-            await CastTargetMercenarySpells();
             await CastTargetMonsterSpells();
 
             var playerPos = Core.GameController.Player.GridPosNum;
@@ -92,19 +91,6 @@ namespace AutoPOE.Logic.Actions
             return true;
         }
 
-        private async Task<bool> CastTargetMercenarySpells()
-        {
-            var merc = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .FirstOrDefault(m => m.IsAlive && m.IsTargetable && !m.IsHostile && m.GridPosNum.Distance(Core.GameController.Player.GridPosNum) <= Core.Settings.ViewDistance);
-            if (merc == null) return false;
-
-            var skill = Core.Settings.GetNextCombatSkill(Settings.Skill.CastTypeSort.TargetMercenary);
-            if (skill == null) return false;
-
-            await Controls.UseKeyAtGridPos(merc.GridPosNum, skill.Hotkey.Value);
-            return true;
-        }
-
         private async Task<bool> CastTargetMonsterSpells()
         {
             // Ensure strategy is loaded
@@ -141,8 +127,7 @@ namespace AutoPOE.Logic.Actions
                 // Fallback to old system if strategy doesn't recommend anything
                 var availableSkills = Core.Settings.GetAvailableSkillsByPriority()
                     .Where(s => s.CastType.Value != CastTypeSort.DoNotUse.ToString() &&
-                               s.CastType.Value != CastTypeSort.TargetSelf.ToString() &&
-                               s.CastType.Value != CastTypeSort.TargetMercenary.ToString())
+                               s.CastType.Value != CastTypeSort.TargetSelf.ToString())
                     .ToList();
 
                 recommendedSkill = availableSkills.FirstOrDefault();
