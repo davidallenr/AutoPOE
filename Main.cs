@@ -1,7 +1,5 @@
 ﻿
 using AutoPOE.Logic;
-using AutoPOE.Logic.Sequences;
-using AutoPOE.Logic.Sequences;
 using AutoPOE.UI;
 using ExileCore;
 using ExileCore.PoEMemory;
@@ -17,22 +15,21 @@ namespace AutoPOE
     public class Main : BaseSettingsPlugin<Settings>
     {
         private bool _wasInSimulacrum = false;
-        private ISequence? _sequence;
 
-        // UI managers
+        // Managers
+        private SequenceManager _sequenceManager;
         private EquipmentCalibrationManager _calibrationManager;
         private DebugRenderer _debugRenderer;
         private SimulacrumStatsRenderer _simulacrumStatsRenderer;
 
-        private ISequence _scarabTraderSequence = new ScarabTraderSequence();
-        private ISequence _debugSequence = new DebugSequence();
         public override bool Initialise()
         {
             this.Name = "Auto POE";
 
             Core.Initialize(GameController, Settings, Graphics, this);
 
-            _sequence = new SimulacrumSequence();
+            // Initialize sequence manager
+            _sequenceManager = new SequenceManager();
 
             // Initialize equipment calibration manager
             _calibrationManager = new EquipmentCalibrationManager(
@@ -75,22 +72,7 @@ namespace AutoPOE
             if (GameController.IsLoading)
                 return base.Tick();
 
-            if (Core.CanUseAction)
-            {
-                switch (Core.Settings.FarmMethod)
-                {
-                    case "Simulacrum":
-                        _sequence?.Tick();
-                        break;
-                    case "ScarabTrader":
-                        _scarabTraderSequence?.Tick();
-                        break;
-                    case "Debug":
-                        _debugSequence?.Tick();
-                        break;
-
-                }
-            }
+            _sequenceManager.Tick(Core.Settings.FarmMethod);
 
             return base.Tick();
         }
@@ -102,22 +84,11 @@ namespace AutoPOE
 
             if (Settings.StartBot.PressedOnce())
             {
-                _scarabTraderSequence = new ScarabTraderSequence();
+                _sequenceManager.ResetScarabTraderSequence();
                 Core.IsBotRunning = !Core.IsBotRunning;
             }
 
-            switch (Core.Settings.FarmMethod)
-            {
-                case "Simulacrum":
-                    _sequence?.Render();
-                    break;
-                case "ScarabTrader":
-                    _scarabTraderSequence?.Render();
-                    break;
-                case "Debug":
-                    _debugSequence?.Render();
-                    break;
-            }
+            _sequenceManager.Render(Core.Settings.FarmMethod);
 
             var drawPos = new System.Numerics.Vector2(100, 200);
 
@@ -133,7 +104,7 @@ namespace AutoPOE
             {
                 drawPos.Y += 40;
                 _debugRenderer.RenderDebugInfo(drawPos);
-            }
+            } e
 
             // Calibration Mode
             if (Settings.Calibration.CalibrateEquipment)
