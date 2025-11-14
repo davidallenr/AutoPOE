@@ -88,6 +88,9 @@ namespace AutoPOE
                 Core.IsBotRunning = !Core.IsBotRunning;
             }
 
+            // Update incubator status (needed for debug display even when bot isn't running)
+            SimulacrumState.UpdateIncubatorStatus();
+
             _sequenceManager.Render(Core.Settings.FarmMethod);
 
             var drawPos = new System.Numerics.Vector2(100, 200);

@@ -74,9 +74,8 @@ namespace AutoPOE.Logic
                 LastMovedAt = DateTime.Now;
             }
 
-            if (Core.GameController.IngameState.IngameUi.StashElement.VisibleStash != null)
-                Core.HasIncubators = Core.GameController.IngameState.IngameUi.StashElement.VisibleStash?.VisibleInventoryItems
-                       .Any(item => item.TextureName.Contains("Incubation/")) ?? false;
+            // Update incubator status
+            UpdateIncubatorStatus();
 
             var townPortal = Core.GameController.EntityListWrapper.ValidEntitiesByType[ExileCore.Shared.Enums.EntityType.TownPortal]
                     .OrderBy(portal => portal.DistancePlayer)
@@ -115,6 +114,45 @@ namespace AutoPOE.Logic
                 var stash = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains("Metadata/MiscellaneousObjects/Stash"));
                 if (stash != null) StashPosition = stash.GridPosNum;
             }
+        }
+
+        /// <summary>
+        /// Updates the incubator status by checking both stash and inventory.
+        /// Can be called independently from Tick() for debug display purposes.
+        /// </summary>
+        public static void UpdateIncubatorStatus()
+        {
+            // Check for incubators in stash (when stash is open and visible)
+            var hasIncubatorsInStash = false;
+            var visibleStash = Core.GameController.IngameState.IngameUi.StashElement?.VisibleStash;
+            if (visibleStash != null)
+            {
+                hasIncubatorsInStash = visibleStash.VisibleInventoryItems?
+                    .Any(item => item?.Item != null && (
+                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) || 
+                        (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)))) ?? false;
+            }
+            
+            // Check for incubators in player inventory
+            var hasIncubatorsInInventory = false;
+            try
+            {
+                var playerInventory = Core.GameController.IngameState.Data.ServerData.PlayerInventories?[0]?.Inventory?.InventorySlotItems;
+                if (playerInventory != null)
+                {
+                    hasIncubatorsInInventory = playerInventory
+                        .Any(item => item?.Item != null && (
+                            (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) || 
+                            (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))));
+                }
+            }
+            catch
+            {
+                // Inventory access can fail during area transitions
+                hasIncubatorsInInventory = false;
+            }
+            
+            Core.HasIncubators = hasIncubatorsInStash || hasIncubatorsInInventory;
         }
     }
 }

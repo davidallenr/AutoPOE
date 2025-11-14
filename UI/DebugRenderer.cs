@@ -41,20 +41,152 @@ namespace AutoPOE.UI
             _graphics.DrawText("=== DEBUG INFO ===", drawPos, SharpDX.Color.Yellow);
             drawPos.Y += 20;
 
-            _graphics.DrawText($"Bot Running: {Core.IsBotRunning}", drawPos, SharpDX.Color.Cyan);
+            // Bot Status
+            _graphics.DrawText($"Bot Running: {Core.IsBotRunning}", drawPos, Core.IsBotRunning ? SharpDX.Color.LimeGreen : SharpDX.Color.Red);
             drawPos.Y += 20;
-            _graphics.DrawText($"Can Use Action: {Core.CanUseAction}", drawPos, SharpDX.Color.Cyan);
+            
+            _graphics.DrawText($"Farm Method: {Core.Settings.FarmMethod.Value}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
+            
+            // NEW: Window Focus Check (important for our new safety feature)
+            var isForeground = Core.IsGameWindowForeground();
+            _graphics.DrawText($"Window Focused: {isForeground}", drawPos, isForeground ? SharpDX.Color.LimeGreen : SharpDX.Color.Orange);
+            drawPos.Y += 20;
+            
+            // Action Status - shows both timing and focus requirements
+            var canUseAction = Core.CanUseAction;
+            _graphics.DrawText($"Can Use Action: {canUseAction}", drawPos, canUseAction ? SharpDX.Color.LimeGreen : SharpDX.Color.Orange);
+            drawPos.Y += 20;
+            
+            // NEW: Action Frequency setting
+            _graphics.DrawText($"Action Delay: {Core.Settings.ActionFrequency.Value}ms", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+
+            // Location Info
             _graphics.DrawText($"In Hideout: {_gameController.Area.CurrentArea.IsHideout}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
+            
+            _graphics.DrawText($"Current Area: {_gameController.Area.CurrentArea.DisplayName}", drawPos, SharpDX.Color.Cyan);
+            drawPos.Y += 20;
+
+            // Position Info
             _graphics.DrawText($"Player Position: {_gameController.Player.GridPos}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
+            
             _graphics.DrawText($"Mouse Position: {Input.MousePosition}", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
+            
+            // NEW: Window bounds info (relevant to our clamping feature)
             var windowRect = _gameController.Window.GetWindowRectangle();
-            _graphics.DrawText($"Window Resolution: {windowRect.Width}x{windowRect.Height}", drawPos, SharpDX.Color.Cyan);
+            _graphics.DrawText($"Window: {windowRect.Width}x{windowRect.Height} @ ({windowRect.X},{windowRect.Y})", drawPos, SharpDX.Color.Cyan);
             drawPos.Y += 20;
-            _graphics.DrawText($"Current Area: {_gameController.Area.CurrentArea.DisplayName}", drawPos, SharpDX.Color.Cyan);
+
+            // NEW: Incubator status
+            if (Core.Settings.FarmMethod == "Simulacrum")
+            {
+                _graphics.DrawText($"Has Incubators: {Core.HasIncubators}", drawPos, Core.HasIncubators ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                drawPos.Y += 20;
+                
+                // Debug: Show inventory/stash details
+                var stashElement = _gameController.IngameState.IngameUi.StashElement;
+                if (stashElement?.VisibleStash != null)
+                {
+                    var invType = stashElement.VisibleStash.InvType;
+                    var itemCount = stashElement.VisibleStash.VisibleInventoryItems?.Count ?? 0;
+                    _graphics.DrawText($"Stash Type: {invType}, Items: {itemCount}", drawPos, SharpDX.Color.Yellow);
+                    drawPos.Y += 20;
+                    
+                    // Check for incubators in stash
+                    var incubatorItems = stashElement.VisibleStash.VisibleInventoryItems?
+                        .Where(item => item?.Item != null && (
+                            (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) || 
+                            (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))))
+                        .ToList();
+                    
+                    var incubCount = incubatorItems?.Count ?? 0;
+                    _graphics.DrawText($"  Incubators Found: {incubCount}", drawPos, incubCount > 0 ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                    drawPos.Y += 15;
+                    
+                    // Show first few items in stash
+                    if (stashElement.VisibleStash.VisibleInventoryItems != null)
+                    {
+                        int itemsShown = 0;
+                        foreach (var item in stashElement.VisibleStash.VisibleInventoryItems.Take(5))
+                        {
+                            if (item?.Item != null)
+                            {
+                                var path = item.Item.Path ?? "null";
+                                var metadata = item.Item.Metadata ?? "null";
+                                var shortPath = path.Length > 40 ? "..." + path.Substring(path.Length - 37) : path;
+                                var shortMeta = metadata.Length > 40 ? "..." + metadata.Substring(metadata.Length - 37) : metadata;
+                                
+                                _graphics.DrawText($"  Path: {shortPath}", drawPos, SharpDX.Color.Gray);
+                                drawPos.Y += 15;
+                                _graphics.DrawText($"  Meta: {shortMeta}", drawPos, SharpDX.Color.Gray);
+                                drawPos.Y += 15;
+                                
+                                itemsShown++;
+                                if (itemsShown >= 3) break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    _graphics.DrawText($"Stash: Not Open", drawPos, SharpDX.Color.Gray);
+                    drawPos.Y += 20;
+                }
+                
+                // Debug: Show inventory details
+                try
+                {
+                    var playerInv = _gameController.IngameState.Data.ServerData.PlayerInventories?[0]?.Inventory;
+                    if (playerInv != null && playerInv.InventorySlotItems != null)
+                    {
+                        var itemCount = playerInv.InventorySlotItems.Count;
+                        _graphics.DrawText($"Inventory Items: {itemCount}", drawPos, SharpDX.Color.Yellow);
+                        drawPos.Y += 20;
+                        
+                        // Check for incubators and show which items match
+                        var incubatorItems = playerInv.InventorySlotItems
+                            .Where(item => item?.Item != null && (
+                                (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) || 
+                                (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))))
+                            .ToList();
+                        
+                        _graphics.DrawText($"  Incubators Found: {incubatorItems.Count}", drawPos, incubatorItems.Count > 0 ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                        drawPos.Y += 15;
+                        
+                        // Show first item in inventory
+                        var firstItem = playerInv.InventorySlotItems.FirstOrDefault(i => i?.Item != null);
+                        if (firstItem?.Item != null)
+                        {
+                            var path = firstItem.Item.Path ?? "null";
+                            var metadata = firstItem.Item.Metadata ?? "null";
+                            var shortPath = path.Length > 40 ? "..." + path.Substring(path.Length - 37) : path;
+                            var shortMeta = metadata.Length > 40 ? "..." + metadata.Substring(metadata.Length - 37) : metadata;
+                            
+                            var hasIncub = path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase) || 
+                                          metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase);
+                            
+                            _graphics.DrawText($"  First Item Path: {shortPath}", drawPos, hasIncub ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                            drawPos.Y += 15;
+                            _graphics.DrawText($"  First Item Meta: {shortMeta}", drawPos, hasIncub ? SharpDX.Color.LimeGreen : SharpDX.Color.Gray);
+                            drawPos.Y += 15;
+                        }
+                    }
+                    else
+                    {
+                        _graphics.DrawText($"Inventory: Not Open", drawPos, SharpDX.Color.Gray);
+                        drawPos.Y += 20;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    _graphics.DrawText($"Inventory: Error - {ex.Message}", drawPos, SharpDX.Color.Red);
+                    drawPos.Y += 20;
+                }
+            }
 
             // Visual Debug Rendering
             if (_settings.Debug.DrawInventory)
