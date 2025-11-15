@@ -73,7 +73,7 @@ namespace AutoPOE.Logic.Combat.Strategies
                     _lastTargetPosition = higherPriorityBoss.GridPosNum;
                     _lastTargetTime = DateTime.Now;
                     _lastTargetName = higherPriorityBoss.RenderName;
-                    LastTargetReason = $"⚡ BOSS SWITCH: {higherPriorityBoss.RenderName} at {distance:F1} units - HIGHER PRIORITY";
+                    LastTargetReason = $"BOSS SWITCH: {higherPriorityBoss.RenderName} at {distance:F1} units (higher priority)";
                     return Task.FromResult<Vector2?>(_lastTargetPosition);
                 }
             }
@@ -162,7 +162,7 @@ namespace AutoPOE.Logic.Combat.Strategies
                 _lastTargetTime = DateTime.Now;
                 _lastTargetName = boss.RenderName;
 
-                LastTargetReason = $"🔒 BOSS LOCKED: {boss.RenderName} at {distance:F1} units";
+                LastTargetReason = $"BOSS LOCKED: {boss.RenderName} at {distance:F1} units";
                 return boss.GridPosNum;
             }
             else
@@ -172,7 +172,7 @@ namespace AutoPOE.Logic.Combat.Strategies
 
                 if (timeSinceLastSeen < 3.0f) // Give 3 seconds grace period
                 {
-                    LastTargetReason = $"🔒 BOSS LOCKED (last seen {timeSinceLastSeen:F1}s ago): {_lastTargetName}";
+                    LastTargetReason = $"BOSS LOCKED: {_lastTargetName} (last seen {timeSinceLastSeen:F1}s ago)";
                     return _lastTargetPosition;
                 }
                 else
@@ -206,7 +206,7 @@ namespace AutoPOE.Logic.Combat.Strategies
             _lastTargetPosition = boss.GridPosNum;
             _lastTargetTime = DateTime.Now;
             _lastTargetName = boss.RenderName;
-            LastTargetReason = $"🎯 BOSS DETECTED: {boss.RenderName} at {distance:F1} units - LOCKING ON";
+            LastTargetReason = $"BOSS DETECTED: {boss.RenderName} at {distance:F1} units - locking on";
 
             return _lastTargetPosition;
         }
