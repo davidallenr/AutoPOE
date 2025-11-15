@@ -12,7 +12,7 @@ namespace AutoPOE.Logic.Sequences
         private Task<ActionResultType> _currentTask;
         private IAction _currentAction;
         private DateTime _lastCombatTime = DateTime.MinValue;
-        private const float COMBAT_TIMEOUT = 3.0f; // Seconds without valid targets before switching to explore
+        private const float COMBAT_TIMEOUT = 3.0f; // Seconds without targets after all monsters dead before switching to explore
 
         // Cache actions to avoid recreating them
         private readonly CombatAction _combatAction = new CombatAction();
@@ -67,20 +67,32 @@ namespace AutoPOE.Logic.Sequences
             if (SimulacrumState.IsWaveActive && Core.Map.ClosestValidGroundItem == null)
             {
                 bool hasValidTargets = HasValidCombatTargets();
+                byte monstersRemaining = Core.GameController.IngameState.Data.ServerData.MonstersRemaining;
 
-                if (hasValidTargets)
+                // Stay in combat action as long as there are monsters alive on the map
+                // Even if none are currently in range, combat action with strategy is better at finding them
+                if (monstersRemaining > 0)
                 {
+                    if (hasValidTargets)
+                    {
+                        _lastCombatTime = DateTime.Now;
+                    }
+                    return _combatAction;
+                }
+                else if (hasValidTargets)
+                {
+                    // Monsters remaining shows 0, but we can still see targets (edge case)
                     _lastCombatTime = DateTime.Now;
                     return _combatAction;
                 }
                 else if (DateTime.Now > _lastCombatTime.AddSeconds(COMBAT_TIMEOUT))
                 {
-                    // No valid targets for a while, switch to explore
+                    // No monsters remaining and no targets for a while, switch to explore
                     return _exploreAction;
                 }
                 else
                 {
-                    // Recently had targets, keep trying combat
+                    // Recently had targets, keep trying combat briefly
                     return _combatAction;
                 }
             }
