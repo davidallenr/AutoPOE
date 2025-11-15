@@ -433,7 +433,7 @@ namespace AutoPOE.UI
 
                 // Draw item name above the box
                 var textPos = new Vector2(rect.X, rect.Y - 15);
-                var itemName = item.Item.Path.Split('/').LastOrDefault() ?? "Unknown";
+                var itemName = item.Item.Path?.Split('/').LastOrDefault() ?? "Unknown";
                 _graphics.DrawText(itemName, textPos, SharpDX.Color.Yellow);
             }
 
