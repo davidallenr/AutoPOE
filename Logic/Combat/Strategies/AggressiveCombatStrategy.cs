@@ -36,9 +36,10 @@ namespace AutoPOE.Logic.Combat.Strategies
                 .Where(m => m.GridPosNum.Distance(playerPos) <= maxRange)
                 .ToList();
 
-            // Special handling for known boss names (Kosis, Omniphobia)
+            // Special handling for known boss names - Kosis priority over Omniphobia
             var bossTargets = validMonsters
                 .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique && IsSimulacrumBoss(m))
+                .OrderByDescending(m => m.RenderName?.Contains("Kosis") == true ? 2 : 1) // Kosis gets priority
                 .ToList();
 
             // If we have boss targets, prioritize them absolutely
@@ -47,27 +48,53 @@ namespace AutoPOE.Logic.Combat.Strategies
                 var boss = bossTargets.First();
                 var distance = boss.GridPosNum.Distance(playerPos);
 
-                // Extended stability for boss fights - stay focused much longer
-                _lastTargetPosition = boss.GridPosNum;
-                _lastTargetTime = DateTime.Now;
-                _lastTargetName = boss.RenderName;
+                // Only update position if boss moved significantly (prevents constant repositioning)
+                const float BOSS_REPOSITION_THRESHOLD = 25f;
+                bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
+                                           _lastTargetPosition.Value.Distance(boss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
 
-                LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units";
-                return Task.FromResult<Vector2?>(boss.GridPosNum);
+                if (shouldUpdatePosition)
+                {
+                    _lastTargetPosition = boss.GridPosNum;
+                    _lastTargetTime = DateTime.Now;
+                    _lastTargetName = boss.RenderName;
+                    LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (repositioning)";
+                }
+                else
+                {
+                    // Keep same target position to avoid cast interruption
+                    LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (stable position)";
+                }
+
+                return Task.FromResult<Vector2?>(_lastTargetPosition);
             }
 
             // Check if we were targeting a boss and should continue
-            if (_lastTargetName != null && IsSimulacrumBossName(_lastTargetName))
+            if (_lastTargetName != null && IsSimulacrumBoss(_lastTargetName))
             {
                 var continueBoss = validMonsters.FirstOrDefault(m => IsSimulacrumBoss(m));
 
                 if (continueBoss != null)
                 {
                     var distance = continueBoss.GridPosNum.Distance(playerPos);
-                    _lastTargetPosition = continueBoss.GridPosNum;
-                    _lastTargetTime = DateTime.Now; // Keep refreshing time for boss fights
-                    LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units";
-                    return Task.FromResult<Vector2?>(continueBoss.GridPosNum);
+
+                    // Only update position if boss moved significantly
+                    const float BOSS_REPOSITION_THRESHOLD = 25f;
+                    bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
+                                               _lastTargetPosition.Value.Distance(continueBoss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
+
+                    if (shouldUpdatePosition)
+                    {
+                        _lastTargetPosition = continueBoss.GridPosNum;
+                        _lastTargetTime = DateTime.Now;
+                        LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (repositioning)";
+                    }
+                    else
+                    {
+                        LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (stable)";
+                    }
+
+                    return Task.FromResult<Vector2?>(_lastTargetPosition);
                 }
                 else
                 {
@@ -91,8 +118,7 @@ namespace AutoPOE.Logic.Combat.Strategies
 
             // If we have a recent target position and there are still enemies near it, stay focused
             // Use longer stability duration for unique enemies (bosses)
-            var currentTargetName = _lastTargetName;
-            var isTargetingBoss = currentTargetName != null && IsSimulacrumBossName(currentTargetName);
+            var isTargetingBoss = _lastTargetName != null && IsSimulacrumBoss(_lastTargetName);
             var stabilityDuration = isTargetingBoss ? UNIQUE_TARGET_STABILITY_DURATION : TARGET_STABILITY_DURATION; if (_lastTargetPosition.HasValue &&
                 DateTime.Now < _lastTargetTime.AddSeconds(stabilityDuration))
             {
@@ -265,21 +291,18 @@ namespace AutoPOE.Logic.Combat.Strategies
         }
 
         /// <summary>
-        /// Checks if an entity is a known Simulacrum boss
+        /// Checks if an entity or name is a known Simulacrum boss
         /// </summary>
-        private bool IsSimulacrumBoss(ExileCore.PoEMemory.MemoryObjects.Entity entity)
+        private bool IsSimulacrumBoss(ExileCore.PoEMemory.MemoryObjects.Entity? entity)
         {
             if (entity?.RenderName == null) return false;
-
-            return entity.RenderName.Contains("Kosis") ||
-                   entity.RenderName.Contains("Omniphobia") ||
-                   entity.RenderName.Contains("Delirium Boss"); // Catch other delirium bosses
+            return IsSimulacrumBoss(entity.RenderName);
         }
 
         /// <summary>
         /// Checks if a name string indicates a Simulacrum boss
         /// </summary>
-        private bool IsSimulacrumBossName(string name)
+        private bool IsSimulacrumBoss(string? name)
         {
             if (string.IsNullOrEmpty(name)) return false;
 
