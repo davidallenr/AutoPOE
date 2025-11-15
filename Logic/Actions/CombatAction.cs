@@ -151,7 +151,7 @@ namespace AutoPOE.Logic.Actions
 
         private async Task<bool> DetonateMines()
         {
-            if (!Core.GameController.Player.Buffs.Any(buff => buff.Name == "mine_mana_reservation"))
+            if (!Core.GameController.Player.Buffs.Any(buff => buff.Name == GameConstants.BuffNames.MineManaReservation))
                 return false;
             if (!Core.Settings.ShouldDetonateMines) return false;
             await Controls.UseKeyAtGridPos(Core.GameController.Player.GridPosNum, Core.Settings.DetonateMinesKey.Value);

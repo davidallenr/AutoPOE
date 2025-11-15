@@ -99,7 +99,7 @@ namespace AutoPOE
             var drawPos = new System.Numerics.Vector2(450, 100);
 
             // Simulacrum stats display
-            if (Core.Settings.FarmMethod == "Simulacrum")
+            if (Core.Settings.FarmMethod == GameConstants.FarmMethods.Simulacrum)
             {
                 _simulacrumStatsRenderer.RenderStats(drawPos);
                 drawPos.X -= 400; // Adjust position for debug info below

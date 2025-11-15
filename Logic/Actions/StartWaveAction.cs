@@ -23,7 +23,7 @@ namespace AutoPOE.Logic.Actions
             if (item != null) return ActionResultType.Failure;
 
             var playerPos = Core.GameController.Player.GridPosNum;
-            var monolith = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains("Objects/Afflictionator"));
+            var monolith = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains(GameConstants.EntityMetadata.SimulacrumMonolith));
 
             if (DateTime.Now > SimulacrumState.LastMovedAt.AddSeconds(2))
             {

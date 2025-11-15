@@ -71,7 +71,7 @@ namespace AutoPOE.Logic.Actions
             // Ensure loot labels are enabled
             if (SimulacrumState.StashPosition != null &&
                 playerPos.Distance(SimulacrumState.StashPosition.Value) < Core.Settings.ViewDistance &&
-                !Core.GameController.IngameState.IngameUi.ItemsOnGroundLabelsVisible.Any(I => I.ItemOnGround != null && !string.IsNullOrEmpty(I.ItemOnGround.Metadata) && I.ItemOnGround.Metadata.Contains("Metadata/MiscellaneousObjects/Stash")))
+                !Core.GameController.IngameState.IngameUi.ItemsOnGroundLabelsVisible.Any(I => I.ItemOnGround != null && !string.IsNullOrEmpty(I.ItemOnGround.Metadata) && I.ItemOnGround.Metadata.Contains(GameConstants.EntityMetadata.Stash)))
                 await Controls.UseKey(Keys.Z);
 
 
@@ -178,7 +178,7 @@ namespace AutoPOE.Logic.Actions
             //Try to catch if we somehow left the loot labels disabled...
             if (SimulacrumState.StashPosition != null &&
                 playerPos.Distance(SimulacrumState.StashPosition.Value) < Core.Settings.ViewDistance &&
-                !Core.GameController.IngameState.IngameUi.ItemsOnGroundLabelsVisible.Any(I =>I.ItemOnGround != null && !string.IsNullOrEmpty(I.ItemOnGround.Metadata)&& I.ItemOnGround.Metadata.Contains("Metadata/MiscellaneousObjects/Stash")))            
+                !Core.GameController.IngameState.IngameUi.ItemsOnGroundLabelsVisible.Any(I =>I.ItemOnGround != null && !string.IsNullOrEmpty(I.ItemOnGround.Metadata)&& I.ItemOnGround.Metadata.Contains(GameConstants.EntityMetadata.Stash)))            
                 await Controls.UseKey(Keys.Z);
             
 

@@ -83,5 +83,62 @@ namespace AutoPOE.Logic
             public const string Goodbye = "goodbye";
             public const string Wave = "wave";
         }
+
+        /// <summary>
+        /// Simulacrum area names (delirium maps)
+        /// </summary>
+        public static class SimulacrumAreas
+        {
+            public const string BridgeEnraptured = "The Bridge Enraptured";
+            public const string OriathDelusion = "Oriath Delusion";
+            public const string SyndromeEncampment = "The Syndrome Encampment";
+            public const string Hysteriagate = "Hysteriagate";
+            public const string LunacysWatch = "Lunacy's Watch";
+
+            private static readonly HashSet<string> _simulacrumAreaNames = new HashSet<string>
+            {
+                BridgeEnraptured,
+                OriathDelusion,
+                SyndromeEncampment,
+                Hysteriagate,
+                LunacysWatch
+            };
+
+            /// <summary>
+            /// Checks if the given area name is a Simulacrum area
+            /// </summary>
+            public static bool IsSimulacrumArea(string? areaName)
+            {
+                if (string.IsNullOrEmpty(areaName))
+                    return false;
+
+                return _simulacrumAreaNames.Contains(areaName);
+            }
+        }
+
+        /// <summary>
+        /// Farm method identifiers
+        /// </summary>
+        public static class FarmMethods
+        {
+            public const string Simulacrum = "Simulacrum";
+            public const string ScarabTrader = "ScarabTrader";
+        }
+
+        /// <summary>
+        /// NPC dialog text strings
+        /// </summary>
+        public static class NpcDialogText
+        {
+            public const string SellItems = "Sell Items";
+        }
+
+        /// <summary>
+        /// Buff names from the game engine
+        /// </summary>
+        public static class BuffNames
+        {
+            public const string MineManaReservation = "mine_mana_reservation";
+        }
     }
 }

@@ -41,9 +41,9 @@ namespace AutoPOE.Logic.Sequences
                 _sequenceCoroutine = RunTraderSequence();
 
             // Only advance the coroutine if the cooldown is over
-            if (_actionCooldown.IsRunning && _actionCooldown.ElapsedMilliseconds < 200)            
+            if (_actionCooldown.IsRunning && _actionCooldown.ElapsedMilliseconds < 200)
                 return;
-            
+
             _actionCooldown.Stop();
 
             if (!_sequenceCoroutine.MoveNext())
@@ -61,7 +61,7 @@ namespace AutoPOE.Logic.Sequences
                 if (Core.GameController.IngameState.Data.ServerData.PlayerInventories[0].Inventory.InventorySlotItems.Count > 0)
                 {
                     _currentState = State.GoToStash;
-                    while (!GoToInteractable("Metadata/MiscellaneousObjects/Stash")) yield return false;
+                    while (!GoToInteractable(GameConstants.EntityMetadata.Stash)) yield return false;
 
                     _currentState = State.OpenStash;
                     while (!OpenStash()) yield return false;
@@ -71,7 +71,7 @@ namespace AutoPOE.Logic.Sequences
                 }
 
                 _currentState = State.GoToStash;
-                while (!GoToInteractable("Metadata/MiscellaneousObjects/Stash")) yield return false;
+                while (!GoToInteractable(GameConstants.EntityMetadata.Stash)) yield return false;
 
                 _currentState = State.OpenStash;
                 while (!OpenStash()) yield return false;
@@ -118,12 +118,12 @@ namespace AutoPOE.Logic.Sequences
             if (target == null)
             {
                 Core.IsBotRunning = false;
-                return true; 
+                return true;
             }
 
             if (Core.GameController.Player.GridPosNum.Distance(target.GridPosNum) < 10)
             {
-                return true; 
+                return true;
             }
 
             var path = Core.Map.FindPath(Core.GameController.Player.GridPosNum, target.GridPosNum);
@@ -140,7 +140,7 @@ namespace AutoPOE.Logic.Sequences
             }
 
             var stashObject = Core.GameController.EntityListWrapper.OnlyValidEntities
-                .FirstOrDefault(e => e.Metadata.Contains("Metadata/MiscellaneousObjects/Stash"));
+                .FirstOrDefault(e => e.Metadata.Contains(GameConstants.EntityMetadata.Stash));
 
             if (stashObject != null)
             {
@@ -155,7 +155,7 @@ namespace AutoPOE.Logic.Sequences
             var playerInventory = Core.GameController.IngameState.Data.ServerData.PlayerInventories[0].Inventory;
             if (playerInventory.InventorySlotItems.Count == 0)
             {
-                return true; 
+                return true;
             }
 
             var item = playerInventory.InventorySlotItems.First();
@@ -169,16 +169,17 @@ namespace AutoPOE.Logic.Sequences
         {
             var playerInventory = Core.GameController.IngameState.Data.ServerData.PlayerInventories[0].Inventory;
 
-            if (playerInventory.InventorySlotItems.Count >= 9)            
+            if (playerInventory.InventorySlotItems.Count >= 9)
                 return true;
-            
-            
+
+
 
             var scarabsToSell = Core.Settings.Trader.ScarabsToSell.Value.Split(',')
                 .Select(s => s.Trim()).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
 
             var visibleScarabs = Core.GameController.IngameState.IngameUi.StashElement?.VisibleStash?.VisibleInventoryItems
-                .Select(item => new {
+                .Select(item => new
+                {
                     InvItem = item,
                     BaseName = item.Item.GetComponent<Base>()?.Name,
                     StackSize = item.Item.GetComponent<Stack>()?.Size ?? 0
@@ -220,7 +221,7 @@ namespace AutoPOE.Logic.Sequences
             {
                 _isWaitingForNpcDialog = false;
 
-                var sellOption = npcDialog.NpcLines.FirstOrDefault(o => o.Text.Contains("Sell Items"));
+                var sellOption = npcDialog.NpcLines.FirstOrDefault(o => o.Text.Contains(GameConstants.NpcDialogText.SellItems));
                 if (sellOption != null)
                 {
                     var center = sellOption.Element.Center;
@@ -235,9 +236,9 @@ namespace AutoPOE.Logic.Sequences
                 return false;
             }
 
-            if (_isWaitingForNpcDialog)            
-                return false; 
-            
+            if (_isWaitingForNpcDialog)
+                return false;
+
 
             var vendor = Core.GameController.EntityListWrapper.OnlyValidEntities
                 .FirstOrDefault(e => e.RenderName.Contains(Core.Settings.Trader.NpcName));
@@ -254,7 +255,7 @@ namespace AutoPOE.Logic.Sequences
 
         private bool SellInventoryToVendor()
         {
-            if(sellIndex > 100)
+            if (sellIndex > 100)
             {
                 //EStop: clicked 100 times without succeeding.
                 Core.IsBotRunning = false;
@@ -282,7 +283,7 @@ namespace AutoPOE.Logic.Sequences
                 Controls.ClickScreenPos(new Vector2(center.X, center.Y));
                 StartCooldown();
             }
-            return false; 
+            return false;
         }
 
         public void Render()

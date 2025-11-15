@@ -1,5 +1,6 @@
 ﻿using AStar;
 using AStar.Options;
+using AutoPOE.Logic;
 using ExileCore;
 using ExileCore.PoEMemory.Elements;
 using ExileCore.PoEMemory.MemoryObjects;
@@ -205,9 +206,9 @@ namespace AutoPOE.Navigation
         public Chunk? GetNextUnrevealedChunk()
         {
             return Chunks
-                .Where(c => !c.IsRevealed && c.Weight > 0) 
+                .Where(c => !c.IsRevealed && c.Weight > 0)
                 .OrderBy(c => c.Position.Distance(Core.GameController.Player.GridPosNum))
-                .ThenByDescending(c => c.Weight) 
+                .ThenByDescending(c => c.Weight)
                 .FirstOrDefault();
         }
 
@@ -265,7 +266,7 @@ namespace AutoPOE.Navigation
             var bestWeight = GetPositionFightWeight(bestPos);
 
             var candidateMonsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .Where(m => m.IsHostile && m.IsAlive && m.GridPosNum.Distance(playerPos) >Core.Settings.CombatDistance.Value * 1);
+                .Where(m => m.IsHostile && m.IsAlive && m.GridPosNum.Distance(playerPos) > Core.Settings.CombatDistance.Value * 1);
 
             foreach (var monster in candidateMonsters)
             {
@@ -313,7 +314,7 @@ namespace AutoPOE.Navigation
         }
 
 
-        public ItemsOnGroundLabelElement.VisibleGroundItemDescription? ClosestValidGroundItem =>            
+        public ItemsOnGroundLabelElement.VisibleGroundItemDescription? ClosestValidGroundItem =>
             FindClosestGeneric(Core.GameController.IngameState.IngameUi.ItemsOnGroundLabelElement.VisibleGroundItemLabels,
                 item => item != null &&
                         item.Label != null &&
@@ -329,16 +330,16 @@ namespace AutoPOE.Navigation
         {
             switch (Core.GameController.Area.CurrentArea.Name)
             {
-                case "The Bridge Enraptured":
+                case GameConstants.SimulacrumAreas.BridgeEnraptured:
                     return new Vector2(551, 624);
-                case "Oriath Delusion":
+                case GameConstants.SimulacrumAreas.OriathDelusion:
                     //return new Vector2(587, 253); Might still need
                     return new Vector2(494, 288);
-                case "The Syndrome Encampment":
+                case GameConstants.SimulacrumAreas.SyndromeEncampment:
                     return new Vector2(316, 253);
-                case "Hysteriagate":
+                case GameConstants.SimulacrumAreas.Hysteriagate:
                     return new Vector2(183, 269);
-                case "Lunacy's Watch":
+                case GameConstants.SimulacrumAreas.LunacysWatch:
                     return new Vector2(270, 687);
                 default: return Vector2.Zero;
             }

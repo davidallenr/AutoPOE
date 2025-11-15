@@ -105,14 +105,14 @@ namespace AutoPOE.Logic.Actions
             // --- 2. Open Stash ---
             if (!IsStashOpen)
             {
-                var stashObj = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains("Metadata/MiscellaneousObjects/Stash"));
+                var stashObj = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains(GameConstants.EntityMetadata.Stash));
                 if (stashObj == null) return ActionResultType.Exception;
 
                 await Controls.ClickScreenPos(Controls.GetScreenByGridPos(stashObj.GridPosNum));
                 await Task.Delay(300);
 
                 if (!IsStashOpen) return ActionResultType.Running;
-                
+
                 // Wait for stash contents to load after opening
                 await Task.Delay(200);
             }
@@ -215,7 +215,7 @@ namespace AutoPOE.Logic.Actions
                     Core.Plugin.LogError($"Cursor not free before picking incubator (state: {Core.GameController.IngameState.IngameUi.Cursor.Action})");
                     await Controls.UseKey(Keys.Escape);
                     await Task.Delay(200);
-                    
+
                     // Check again after escape
                     if (Core.GameController.IngameState.IngameUi.Cursor.Action != MouseActionType.Free)
                     {
@@ -231,12 +231,12 @@ namespace AutoPOE.Logic.Actions
 
                 // Right-click incubator in stash
                 await Controls.ClickScreenPos(incubatorToApply.Value, false, true);
-                
+
                 // Give more time for the cursor state to change
                 await Task.Delay(150);
-                
+
                 Core.Plugin.LogMessage($"After right-click, cursor state: {Core.GameController.IngameState.IngameUi.Cursor.Action}");
-                
+
                 if (!await WaitForCursorState(MouseActionType.UseItem, 2000))
                 {
                     Core.Plugin.LogError("Failed to pick up incubator - cursor didn't change to UseItem");
@@ -362,8 +362,8 @@ namespace AutoPOE.Logic.Actions
                 // Use the same detection logic as UpdateIncubatorStatus
                 var incubator = visibleItems
                     .FirstOrDefault(item => item?.Item != null && (
-                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) ||
-                        (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))));
+                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains(GameConstants.ItemMetadata.Incubator, System.StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains(GameConstants.ItemMetadata.Incubator, System.StringComparison.OrdinalIgnoreCase))));
 
                 if (incubator == null)
                 {
@@ -374,10 +374,10 @@ namespace AutoPOE.Logic.Actions
                 var rect = incubator.GetClientRect();
                 var center = rect.Center;
                 var position = new Vector2(center.X, center.Y);
-                
+
                 Core.Plugin.LogMessage($"FindIncubatorInStash: Found incubator at position ({position.X}, {position.Y}), rect: {rect.Width}x{rect.Height}");
                 Core.Plugin.LogMessage($"FindIncubatorInStash: Incubator Path: {incubator.Item.Path}");
-                
+
                 return position;
             }
             catch (Exception ex)
