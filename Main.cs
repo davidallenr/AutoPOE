@@ -60,9 +60,6 @@ namespace AutoPOE
                 Graphics
             );
 
-            // Initialize persistent Simulacrum statistics
-            SimulacrumState.InitializeStatsPersistence(ConfigDirectory, LogMessage, LogError);
-
             // Set up button callbacks
             Settings.Debug.ForceApplyIncubators.OnPressed = () => _ = ApplyIncubatorsManually();
 

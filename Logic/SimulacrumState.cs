@@ -19,50 +19,28 @@ namespace AutoPOE.Logic
         private static readonly List<double> _runTimes = new List<double>();
         private static readonly List<int> _wavesCompleted = new List<int>();
 
-        // Persistent statistics
-        private static SimulacrumStatsPersistence? _statsPersistence;
-
-        // Legacy properties (now delegate to persistent stats when available)
-        public static int TotalRunsCompleted => _statsPersistence?.GetDisplayStats().TotalRuns ?? _runTimes.Count;
-        public static double AverageTimePerRun => _statsPersistence?.GetDisplayStats().OverallAverageTime ?? (_runTimes.Count > 0 ? _runTimes.Average() : 0);
+        // Simple legacy tracking stats (in-memory only)
+        public static int TotalRunsCompleted => _runTimes.Count;
+        public static double AverageTimePerRun => _runTimes.Count > 0 ? _runTimes.Average() : 0;
         public static double AverageWavesCompleted => _wavesCompleted.Count > 0 ? _wavesCompleted.Average() : 15;
 
         /// <summary>
-        /// Initializes the persistent statistics system
+        /// Gets legacy summary statistics that match the previous behavior.
         /// </summary>
-        public static void InitializeStatsPersistence(string configDirectory, Action<string> logMessage, Action<string> logError)
+        public static SimulacrumRunSummary GetLegacyStats()
         {
-            try
+            return new SimulacrumRunSummary
             {
-                _statsPersistence = new SimulacrumStatsPersistence(configDirectory, logMessage, logError);
-                _statsPersistence.LoadStats();
-            }
-            catch (Exception ex)
-            {
-                logError?.Invoke($"Failed to initialize Simulacrum stats persistence: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Gets enhanced display statistics (includes persistent data)
-        /// </summary>
-        public static SimulacrumStatsDisplay GetEnhancedStats()
-        {
-            return _statsPersistence?.GetDisplayStats() ?? new SimulacrumStatsDisplay
-            {
-                TotalRuns = _runTimes.Count,
-                OverallAverageTime = _runTimes.Count > 0 ? _runTimes.Average() : 0
+                TotalRuns = TotalRunsCompleted,
+                AverageDuration = AverageTimePerRun,
+                AverageWaves = AverageWavesCompleted
             };
         }
 
         public static void RecordRun(int wavesCompleted, double durationSeconds)
         {
-            // Legacy in-memory tracking
             _wavesCompleted.Add(wavesCompleted);
             _runTimes.Add(durationSeconds);
-
-            // Persistent tracking
-            _statsPersistence?.RecordCompletedRun(durationSeconds, wavesCompleted);
         }
 
 
@@ -194,5 +172,12 @@ namespace AutoPOE.Logic
 
             Core.HasIncubators = hasIncubatorsInStash || hasIncubatorsInInventory;
         }
+    }
+
+    public class SimulacrumRunSummary
+    {
+        public int TotalRuns { get; set; }
+        public double AverageDuration { get; set; }
+        public double AverageWaves { get; set; }
     }
 }
