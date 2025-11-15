@@ -51,34 +51,81 @@ namespace AutoPOE.Logic.Actions
             await CastTargetMonsterSpells();
 
             var playerPos = Core.GameController.Player.GridPosNum;
-            var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
-            _bestFightPos = Core.Map.FindBestFightingPosition();
 
-            // Always try to generate a new path if none exists
-            if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
-            {
-                var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
-                // Only set the path if it was successfully created and the target isn't too far
-                if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
-                {
-                    _currentPath = newPath;
-                }
-            }
+            // Check if we're locked on a priority target (e.g., boss)
+            LoadStrategy();
+            bool isLockedOnPriorityTarget = _combatStrategy.IsLockedOnPriorityTarget();
 
-            if (_currentPath != null && !_currentPath.IsFinished)
+            // When locked on priority target, only reposition toward the target
+            if (isLockedOnPriorityTarget && _lastTarget.HasValue)
             {
-                // Validate path isn't leading to an unreachable area
-                var nextTarget = _currentPath.Next;
-                if (nextTarget.HasValue && nextTarget.Value.Distance(playerPos) > 300)
+                var distanceToTarget = playerPos.Distance(_lastTarget.Value);
+                const float BOSS_ENGAGE_DISTANCE = 30f; // Distance to maintain from boss
+
+                // If boss is too far, move closer
+                if (distanceToTarget > BOSS_ENGAGE_DISTANCE)
                 {
-                    // Path target is too far, abandon it
-                    _currentPath = null;
+                    if (_currentPath == null || _currentPath.IsFinished)
+                    {
+                        var newPath = Core.Map.FindPath(playerPos, _lastTarget.Value);
+                        if (newPath != null)
+                        {
+                            _currentPath = newPath;
+                        }
+                    }
+
+                    if (_currentPath != null && !_currentPath.IsFinished)
+                    {
+                        await _currentPath.FollowPath();
+                    }
+                    else
+                    {
+                        _currentPath = null;
+                    }
                 }
                 else
                 {
-                    await _currentPath.FollowPath();
+                    // Close enough to boss, stop moving
+                    _currentPath = null;
                 }
             }
+            // Normal repositioning when not locked on priority target
+            else if (!isLockedOnPriorityTarget)
+            {
+                var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
+                _bestFightPos = Core.Map.FindBestFightingPosition();
+
+                // Always try to generate a new path if none exists
+                if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
+                {
+                    var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
+                    // Only set the path if it was successfully created and the target isn't too far
+                    if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
+                    {
+                        _currentPath = newPath;
+                    }
+                }
+
+                if (_currentPath != null && !_currentPath.IsFinished)
+                {
+                    // Validate path isn't leading to an unreachable area
+                    var nextTarget = _currentPath.Next;
+                    if (nextTarget.HasValue && nextTarget.Value.Distance(playerPos) > 300)
+                    {
+                        // Path target is too far, abandon it
+                        _currentPath = null;
+                    }
+                    else
+                    {
+                        await _currentPath.FollowPath();
+                    }
+                }
+                else
+                {
+                    _currentPath = null;
+                }
+            }
+            // When locked but no target position yet, clear paths
             else
             {
                 _currentPath = null;

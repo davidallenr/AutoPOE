@@ -110,5 +110,11 @@ namespace AutoPOE.Logic.Combat.Strategies
         {
             return Core.Settings.CombatDistance.Value;
         }
+
+        public bool IsLockedOnPriorityTarget()
+        {
+            // Standard strategy doesn't have priority target locking
+            return false;
+        }
     }
 }

@@ -407,6 +407,11 @@ namespace AutoPOE.Logic.Combat.Strategies
             return Math.Min(Core.Settings.CombatDistance.Value + 15, 60);
         }
 
+        public bool IsLockedOnPriorityTarget()
+        {
+            return _isBossLocked;
+        }
+
         /// <summary>
         /// Checks if an entity or name is a known Simulacrum boss
         /// </summary>

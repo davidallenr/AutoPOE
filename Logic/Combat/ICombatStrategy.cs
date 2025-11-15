@@ -63,5 +63,12 @@ namespace AutoPOE.Logic.Combat
         /// </summary>
         /// <returns>Maximum range in units</returns>
         int GetMaxCombatRange();
+
+        /// <summary>
+        /// Indicates whether the strategy is currently locked onto a high-priority target (e.g., boss)
+        /// When true, repositioning logic should be disabled
+        /// </summary>
+        /// <returns>True if locked onto a priority target</returns>
+        bool IsLockedOnPriorityTarget();
     }
 }
