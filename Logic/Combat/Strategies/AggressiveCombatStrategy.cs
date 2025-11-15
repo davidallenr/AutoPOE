@@ -15,176 +15,215 @@ namespace AutoPOE.Logic.Combat.Strategies
         public int KiteDistance => 0;
         public string LastTargetReason { get; private set; } = "No target selected yet";
 
+        // Targeting state
         private Vector2? _lastTargetPosition;
         private DateTime _lastTargetTime = DateTime.MinValue;
-        private const float TARGET_STABILITY_DURATION = 1.5f; // Standard duration for target stability
-        private const float UNIQUE_TARGET_STABILITY_DURATION = 5.0f; // Longer duration for unique enemies (bosses)
-        private DateTime _lastTargetTimeout = DateTime.MinValue;
-        private const float TARGET_TIMEOUT = 5.0f; // Reset if stuck on unreachable target
-        private string? _lastTargetName; // Track specific target names for bosses
+        private string? _lastTargetName;
+
+        // Constants
+        private const float TARGET_STABILITY_DURATION = 1.5f;
+        private const float UNIQUE_TARGET_STABILITY_DURATION = 5.0f;
+        private const float BOSS_REPOSITION_THRESHOLD = 25f;
+        private const float TARGET_TIMEOUT = 5.0f; // Currently unused but kept for future use
 
         public Task<Vector2?> SelectTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters)
         {
             var maxRange = GetMaxCombatRange();
             var playerPos = Core.GameController.Player.GridPosNum;
 
-            // Debug: Check why monsters are being filtered out
-            var hostileMonsters = monsters.Where(m => m.IsHostile).ToList();
-            var targetableMonsters = hostileMonsters.Where(m => m.IsTargetable).ToList();
-            var aliveMonsters = targetableMonsters.Where(m => m.IsAlive).ToList();
-            var validMonsters = aliveMonsters
-                .Where(m => m.GridPosNum.Distance(playerPos) <= maxRange)
-                .ToList();
+            // Filter to valid combat targets
+            var validMonsters = FilterValidMonsters(monsters, playerPos, maxRange);
 
-            // Special handling for known boss names - Kosis priority over Omniphobia
-            var bossTargets = validMonsters
-                .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique && IsSimulacrumBoss(m))
-                .OrderByDescending(m => m.RenderName?.Contains("Kosis") == true ? 2 : 1) // Kosis gets priority
-                .ToList();
+            // Priority 1: Simulacrum bosses (Kosis > Omniphobia)
+            var bossTarget = SelectBossTarget(validMonsters, playerPos);
+            if (bossTarget.HasValue)
+                return Task.FromResult<Vector2?>(bossTarget);
 
-            // If we have boss targets, prioritize them absolutely
-            if (bossTargets.Any())
-            {
-                var boss = bossTargets.First();
-                var distance = boss.GridPosNum.Distance(playerPos);
+            // Priority 2: Continue tracking previously targeted boss
+            var continuedBossTarget = ContinueBossTracking(validMonsters, playerPos);
+            if (continuedBossTarget.HasValue)
+                return Task.FromResult<Vector2?>(continuedBossTarget);
 
-                // Only update position if boss moved significantly (prevents constant repositioning)
-                const float BOSS_REPOSITION_THRESHOLD = 25f;
-                bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
-                                           _lastTargetPosition.Value.Distance(boss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
-
-                if (shouldUpdatePosition)
-                {
-                    _lastTargetPosition = boss.GridPosNum;
-                    _lastTargetTime = DateTime.Now;
-                    _lastTargetName = boss.RenderName;
-                    LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (repositioning)";
-                }
-                else
-                {
-                    // Keep same target position to avoid cast interruption
-                    LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (stable position)";
-                }
-
-                return Task.FromResult<Vector2?>(_lastTargetPosition);
-            }
-
-            // Check if we were targeting a boss and should continue
-            if (_lastTargetName != null && IsSimulacrumBoss(_lastTargetName))
-            {
-                var continueBoss = validMonsters.FirstOrDefault(m => IsSimulacrumBoss(m));
-
-                if (continueBoss != null)
-                {
-                    var distance = continueBoss.GridPosNum.Distance(playerPos);
-
-                    // Only update position if boss moved significantly
-                    const float BOSS_REPOSITION_THRESHOLD = 25f;
-                    bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
-                                               _lastTargetPosition.Value.Distance(continueBoss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
-
-                    if (shouldUpdatePosition)
-                    {
-                        _lastTargetPosition = continueBoss.GridPosNum;
-                        _lastTargetTime = DateTime.Now;
-                        LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (repositioning)";
-                    }
-                    else
-                    {
-                        LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (stable)";
-                    }
-
-                    return Task.FromResult<Vector2?>(_lastTargetPosition);
-                }
-                else
-                {
-                    // Boss is dead, clear tracking
-                    _lastTargetName = null;
-                    _lastTargetPosition = null;
-                    _lastTargetTime = DateTime.MinValue;
-                }
-            }
+            // No valid monsters found
             if (!validMonsters.Any())
             {
-                // Provide detailed debug info about why no monsters are valid
-                var closestDistance = aliveMonsters.Any() ?
-                    aliveMonsters.Min(m => m.GridPosNum.Distance(playerPos)) : -1;
-
-                LastTargetReason = $"No valid monsters in range. Max: {maxRange}, Total: {monsters.Count}, Hostile: {hostileMonsters.Count}, Targetable: {targetableMonsters.Count}, Alive: {aliveMonsters.Count}, Closest: {closestDistance:F1}";
-                _lastTargetPosition = null;
-                _lastTargetTime = DateTime.MinValue; // Reset timing when no monsters
+                ResetTargetTracking();
+                LastTargetReason = BuildNoTargetsDebugMessage(monsters, playerPos, maxRange);
                 return Task.FromResult<Vector2?>(null);
             }
 
-            // If we have a recent target position and there are still enemies near it, stay focused
-            // Use longer stability duration for unique enemies (bosses)
-            var isTargetingBoss = _lastTargetName != null && IsSimulacrumBoss(_lastTargetName);
-            var stabilityDuration = isTargetingBoss ? UNIQUE_TARGET_STABILITY_DURATION : TARGET_STABILITY_DURATION; if (_lastTargetPosition.HasValue &&
-                DateTime.Now < _lastTargetTime.AddSeconds(stabilityDuration))
+            // Priority 3: Maintain stable targeting on current area
+            var stableTarget = SelectStableTarget(validMonsters, playerPos);
+            if (stableTarget.HasValue)
+                return Task.FromResult<Vector2?>(stableTarget);
+
+            // Priority 4: Find new optimal target
+            return Task.FromResult(SelectNewTarget(validMonsters, playerPos, maxRange));
+        }
+
+        /// <summary>
+        /// Filters monsters to valid combat targets within range
+        /// </summary>
+        private List<ExileCore.PoEMemory.MemoryObjects.Entity> FilterValidMonsters(
+            List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters,
+            Vector2 playerPos,
+            int maxRange)
+        {
+            return monsters
+                .Where(m => m.IsHostile && m.IsTargetable && m.IsAlive)
+                .Where(m => m.GridPosNum.Distance(playerPos) <= maxRange)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Attempts to select a Simulacrum boss target (Kosis priority)
+        /// </summary>
+        private Vector2? SelectBossTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters, Vector2 playerPos)
+        {
+            var bossTargets = validMonsters
+                .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique && IsSimulacrumBoss(m))
+                .OrderByDescending(m => m.RenderName?.Contains("Kosis") == true ? 2 : 1)
+                .ToList();
+
+            if (!bossTargets.Any())
+                return null;
+
+            var boss = bossTargets.First();
+            var distance = boss.GridPosNum.Distance(playerPos);
+
+            // Only reposition if boss moved significantly (prevents cast interruption)
+            bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
+                                       _lastTargetPosition.Value.Distance(boss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
+
+            if (shouldUpdatePosition)
             {
-                // Check for targets near our last position
-                var nearCurrentTarget = validMonsters
-                    .Where(m => m.GridPosNum.Distance(_lastTargetPosition.Value) < 30) // Increased area for stability
-                    .ToList();
+                _lastTargetPosition = boss.GridPosNum;
+                _lastTargetTime = DateTime.Now;
+                _lastTargetName = boss.RenderName;
+                LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (repositioning)";
+            }
+            else
+            {
+                LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (stable position)";
+            }
 
-                if (nearCurrentTarget.Any())
+            return _lastTargetPosition;
+        }
+
+        /// <summary>
+        /// Continues tracking a previously targeted boss if still alive
+        /// </summary>
+        private Vector2? ContinueBossTracking(List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters, Vector2 playerPos)
+        {
+            if (_lastTargetName == null || !IsSimulacrumBoss(_lastTargetName))
+                return null;
+
+            var continueBoss = validMonsters.FirstOrDefault(m => IsSimulacrumBoss(m));
+
+            if (continueBoss != null)
+            {
+                var distance = continueBoss.GridPosNum.Distance(playerPos);
+
+                bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
+                                           _lastTargetPosition.Value.Distance(continueBoss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
+
+                if (shouldUpdatePosition)
                 {
-                    // Find best target in current area (prefer rare/unique, then closest)
-                    var stableTarget = nearCurrentTarget
-                        .OrderByDescending(m => Navigation.Map.GetMonsterRarityWeight(m.Rarity))
-                        .ThenBy(m => m.GridPosNum.Distance(_lastTargetPosition.Value))
-                        .FirstOrDefault();
-
-                    if (stableTarget != null)
-                    {
-                        var distance = stableTarget.GridPosNum.Distance(playerPos);
-                        LastTargetReason = $"Focused on current area ({stableTarget.Rarity}) at {distance:F1} units";
-
-                        // Update position to track moving enemies (especially for unique)
-                        if (stableTarget.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
-                        {
-                            _lastTargetPosition = stableTarget.GridPosNum;
-                            _lastTargetName = stableTarget.RenderName; // Track boss names
-                        }
-
-                        return Task.FromResult<Vector2?>(stableTarget.GridPosNum);
-                    }
+                    _lastTargetPosition = continueBoss.GridPosNum;
+                    _lastTargetTime = DateTime.Now;
+                    LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (repositioning)";
                 }
                 else
                 {
-                    // No monsters near last target, but check if we should stick with a unique enemy
-                    var uniqueTarget = validMonsters.FirstOrDefault(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique);
-                    if (uniqueTarget != null)
+                    LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (stable)";
+                }
+
+                return _lastTargetPosition;
+            }
+            else
+            {
+                // Boss is dead, clear tracking
+                ResetTargetTracking();
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Maintains stable targeting on current area to avoid constant repositioning
+        /// </summary>
+        private Vector2? SelectStableTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters, Vector2 playerPos)
+        {
+            var isTargetingBoss = _lastTargetName != null && IsSimulacrumBoss(_lastTargetName);
+            var stabilityDuration = isTargetingBoss ? UNIQUE_TARGET_STABILITY_DURATION : TARGET_STABILITY_DURATION;
+
+            if (!_lastTargetPosition.HasValue || DateTime.Now >= _lastTargetTime.AddSeconds(stabilityDuration))
+                return null;
+
+            // Check for targets near our last position
+            var nearCurrentTarget = validMonsters
+                .Where(m => m.GridPosNum.Distance(_lastTargetPosition.Value) < 30)
+                .ToList();
+
+            if (nearCurrentTarget.Any())
+            {
+                var stableTarget = nearCurrentTarget
+                    .OrderByDescending(m => Navigation.Map.GetMonsterRarityWeight(m.Rarity))
+                    .ThenBy(m => m.GridPosNum.Distance(_lastTargetPosition.Value))
+                    .FirstOrDefault();
+
+                if (stableTarget != null)
+                {
+                    var distance = stableTarget.GridPosNum.Distance(playerPos);
+                    LastTargetReason = $"Focused on current area ({stableTarget.Rarity}) at {distance:F1} units";
+
+                    // Track unique enemies
+                    if (stableTarget.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
                     {
-                        // Extend stability for unique enemies (especially bosses)
-                        _lastTargetPosition = uniqueTarget.GridPosNum;
-                        _lastTargetTime = DateTime.Now;
-                        _lastTargetName = uniqueTarget.RenderName;
-                        var distance = uniqueTarget.GridPosNum.Distance(playerPos);
-                        LastTargetReason = $"Following unique enemy: {uniqueTarget.RenderName} at {distance:F1} units";
-                        return Task.FromResult<Vector2?>(uniqueTarget.GridPosNum);
+                        _lastTargetPosition = stableTarget.GridPosNum;
+                        _lastTargetName = stableTarget.RenderName;
                     }
 
-                    // No monsters near last target, reset timing to find new area faster
-                    _lastTargetTime = DateTime.MinValue;
+                    return stableTarget.GridPosNum;
                 }
             }
 
-            // Prioritize closer targets to avoid getting stuck at map edges
+            // Try to stick with any unique enemy
+            var uniqueTarget = validMonsters.FirstOrDefault(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique);
+            if (uniqueTarget != null)
+            {
+                _lastTargetPosition = uniqueTarget.GridPosNum;
+                _lastTargetTime = DateTime.Now;
+                _lastTargetName = uniqueTarget.RenderName;
+                var distance = uniqueTarget.GridPosNum.Distance(playerPos);
+                LastTargetReason = $"Following unique enemy: {uniqueTarget.RenderName} at {distance:F1} units";
+                return uniqueTarget.GridPosNum;
+            }
+
+            // No valid stable targets, reset timing
+            _lastTargetTime = DateTime.MinValue;
+            return null;
+        }
+
+        /// <summary>
+        /// Selects a new optimal target based on Focus Fire setting and proximity
+        /// </summary>
+        private Vector2? SelectNewTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters, Vector2 playerPos, int maxRange)
+        {
+            // Prefer closer targets to avoid map edge issues
             var closeTargets = validMonsters.Where(m => m.GridPosNum.Distance(playerPos) < maxRange * 0.7f).ToList();
             var targetsToConsider = closeTargets.Any() ? closeTargets : validMonsters;
 
-            // If we've been targeting the same area for too long without success, try closer monsters only
+            // Timeout handling: switch to closer targets if stuck
             if (_lastTargetPosition.HasValue &&
                 DateTime.Now > _lastTargetTime.AddSeconds(TARGET_STABILITY_DURATION * 2) &&
                 closeTargets.Any())
             {
                 targetsToConsider = closeTargets;
                 LastTargetReason = "Switching to closer targets due to timeout";
-                _lastTargetTime = DateTime.MinValue; // Reset timing
+                _lastTargetTime = DateTime.MinValue;
             }
 
-            // Find new target area - use Focus Fire setting to determine priority
+            // Find best target using Focus Fire setting
             var bestTarget = targetsToConsider
                 .Select(m => new
                 {
@@ -193,28 +232,52 @@ namespace AutoPOE.Logic.Combat.Strategies
                     RarityWeight = Navigation.Map.GetMonsterRarityWeight(m.Rarity),
                     Distance = m.GridPosNum.Distance(playerPos)
                 })
-                .OrderByDescending(x => Core.Settings.Combat.FocusFire.Value ? x.RarityWeight : x.NearbyCount) // Focus Fire: rarity first, else groups first
-                .ThenByDescending(x => Core.Settings.Combat.FocusFire.Value ? x.NearbyCount : x.RarityWeight) // Secondary priority
-                .ThenBy(x => x.Distance) // Always prefer closer targets as tie-breaker
+                .OrderByDescending(x => Core.Settings.Combat.FocusFire.Value ? x.RarityWeight : x.NearbyCount)
+                .ThenByDescending(x => Core.Settings.Combat.FocusFire.Value ? x.NearbyCount : x.RarityWeight)
+                .ThenBy(x => x.Distance)
                 .FirstOrDefault();
 
             if (bestTarget == null)
             {
                 LastTargetReason = "No valid target found";
                 _lastTargetPosition = null;
-                return Task.FromResult<Vector2?>(null);
+                return null;
             }
 
-            // Update target tracking
+            // Update tracking
             _lastTargetPosition = bestTarget.Monster.GridPosNum;
             _lastTargetTime = DateTime.Now;
             _lastTargetName = bestTarget.Monster.RenderName;
 
-            var targetDistance = bestTarget.Monster.GridPosNum.Distance(playerPos);
             var focusMode = Core.Settings.Combat.FocusFire.Value ? "Focus Fire" : "Group Clear";
-            LastTargetReason = $"{focusMode}: {bestTarget.Monster.Rarity} ({bestTarget.NearbyCount} nearby) at {targetDistance:F1} units";
+            LastTargetReason = $"{focusMode}: {bestTarget.Monster.Rarity} ({bestTarget.NearbyCount} nearby) at {bestTarget.Distance:F1} units";
 
-            return Task.FromResult<Vector2?>(bestTarget.Monster.GridPosNum);
+            return _lastTargetPosition;
+        }
+
+        /// <summary>
+        /// Resets all target tracking state
+        /// </summary>
+        private void ResetTargetTracking()
+        {
+            _lastTargetName = null;
+            _lastTargetPosition = null;
+            _lastTargetTime = DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Builds detailed debug message when no targets are found
+        /// </summary>
+        private string BuildNoTargetsDebugMessage(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters, Vector2 playerPos, int maxRange)
+        {
+            var hostileMonsters = monsters.Where(m => m.IsHostile).ToList();
+            var targetableMonsters = hostileMonsters.Where(m => m.IsTargetable).ToList();
+            var aliveMonsters = targetableMonsters.Where(m => m.IsAlive).ToList();
+            var closestDistance = aliveMonsters.Any() ? aliveMonsters.Min(m => m.GridPosNum.Distance(playerPos)) : -1;
+
+            return $"No valid monsters in range. Max: {maxRange}, Total: {monsters.Count}, " +
+                   $"Hostile: {hostileMonsters.Count}, Targetable: {targetableMonsters.Count}, " +
+                   $"Alive: {aliveMonsters.Count}, Closest: {closestDistance:F1}";
         }
 
         public Task<Settings.Skill?> GetRecommendedSkill(ExileCore.PoEMemory.MemoryObjects.Entity? targetEntity, float playerHealth, int enemyCount)
