@@ -101,7 +101,7 @@ namespace AutoPOE.Logic
 
             if (townPortal != null) PortalPosition = townPortal.GridPosNum;
 
-            var monolith = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains("Objects/Afflictionator"));
+            var monolith = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains(GameConstants.EntityMetadata.SimulacrumMonolith));
 
             if (monolith != null)
             {
@@ -109,9 +109,9 @@ namespace AutoPOE.Logic
                 var state = monolith.GetComponent<StateMachine>();
                 if (state != null)
                 {
-                    var isWaveActive = state.States.FirstOrDefault(s => s.Name == "active")?.Value > 0 &&
-                        state.States.FirstOrDefault(s => s.Name == "goodbye")?.Value == 0;
-                    var currentWave = (int)(state.States.FirstOrDefault(s => s.Name == "wave")?.Value ?? 0);
+                    var isWaveActive = state.States.FirstOrDefault(s => s.Name == GameConstants.MonolithStates.Active)?.Value > 0 &&
+                        state.States.FirstOrDefault(s => s.Name == GameConstants.MonolithStates.Goodbye)?.Value == 0;
+                    var currentWave = (int)(state.States.FirstOrDefault(s => s.Name == GameConstants.MonolithStates.Wave)?.Value ?? 0);
 
                     if (IsWaveActive && !isWaveActive)
                         CanStartWaveAt = DateTime.Now.AddSeconds(Core.Settings.Simulacrum_MinimumWaveDelay);
@@ -129,7 +129,7 @@ namespace AutoPOE.Logic
 
             if (!StashPosition.HasValue)
             {
-                var stash = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains("Metadata/MiscellaneousObjects/Stash"));
+                var stash = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Metadata.Contains(GameConstants.EntityMetadata.Stash));
                 if (stash != null) StashPosition = stash.GridPosNum;
             }
         }
@@ -147,8 +147,8 @@ namespace AutoPOE.Logic
             {
                 hasIncubatorsInStash = visibleStash.VisibleInventoryItems?
                     .Any(item => item?.Item != null && (
-                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) ||
-                        (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)))) ?? false;
+                        (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains(GameConstants.ItemMetadata.Incubator, System.StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains(GameConstants.ItemMetadata.Incubator, System.StringComparison.OrdinalIgnoreCase)))) ?? false;
             }
 
             // Check for incubators in player inventory
@@ -160,8 +160,8 @@ namespace AutoPOE.Logic
                 {
                     hasIncubatorsInInventory = playerInventory
                         .Any(item => item?.Item != null && (
-                            (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase)) ||
-                            (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains("Incubation", System.StringComparison.OrdinalIgnoreCase))));
+                            (!string.IsNullOrEmpty(item.Item.Path) && item.Item.Path.Contains(GameConstants.ItemMetadata.Incubator, System.StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(item.Item.Metadata) && item.Item.Metadata.Contains(GameConstants.ItemMetadata.Incubator, System.StringComparison.OrdinalIgnoreCase))));
                 }
             }
             catch

@@ -41,7 +41,7 @@ namespace AutoPOE.Logic.Actions
                 return ActionResultType.Running;
             }
 
-            var mapDeviceEntity = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Type == EntityType.IngameIcon && I.Path.EndsWith("MappingDevice"));
+            var mapDeviceEntity = Core.GameController.EntityListWrapper.OnlyValidEntities.FirstOrDefault(I => I.Type == EntityType.IngameIcon && I.Path.EndsWith(GameConstants.EntityMetadata.MappingDevice));
             if (mapDeviceEntity == null)
                 return ActionResultType.Exception;
 
@@ -50,8 +50,8 @@ namespace AutoPOE.Logic.Actions
             {
                 if (_currentPath == null)
                     _currentPath = Core.Map.FindPath(playerPos, mapDeviceEntity.GridPosNum);
-                if (_currentPath != null && !_currentPath.IsFinished)                
-                    await _currentPath.FollowPath();                
+                if (_currentPath != null && !_currentPath.IsFinished)
+                    await _currentPath.FollowPath();
                 else
                 {
                     await Controls.ClickScreenPos(Controls.GetScreenByWorldPos(mapDeviceEntity.BoundsCenterPosNum));
@@ -72,7 +72,7 @@ namespace AutoPOE.Logic.Actions
                 else
                 {
                     var mapStashPanel = mapDeviceWindow.GetChildFromIndices(0, 1);
-                    var anySimulacrum = mapStashPanel?.Children.FirstOrDefault(I =>I.Type == ExileCore.PoEMemory.ElementType.InventoryItem && I.Entity.Path.EndsWith("CurrencyAfflictionFragment"));
+                    var anySimulacrum = mapStashPanel?.Children.FirstOrDefault(I => I.Type == ExileCore.PoEMemory.ElementType.InventoryItem && I.Entity.Path.EndsWith(GameConstants.EntityMetadata.SimulacrumFragment));
 
                     if (anySimulacrum == null)
                     {

@@ -82,7 +82,7 @@ namespace AutoPOE.Logic.Combat.Strategies
         {
             var bossTargets = validMonsters
                 .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique && IsSimulacrumBoss(m))
-                .OrderByDescending(m => m.RenderName?.Contains("Kosis") == true ? 2 : 1)
+                .OrderByDescending(m => GameConstants.SimulacrumBosses.GetBossPriority(m.RenderName))
                 .ToList();
 
             if (!bossTargets.Any())
@@ -367,11 +367,7 @@ namespace AutoPOE.Logic.Combat.Strategies
         /// </summary>
         private bool IsSimulacrumBoss(string? name)
         {
-            if (string.IsNullOrEmpty(name)) return false;
-
-            return name.Contains("Kosis") ||
-                   name.Contains("Omniphobia") ||
-                   name.Contains("Delirium Boss");
+            return GameConstants.SimulacrumBosses.IsBoss(name);
         }
     }
 }
