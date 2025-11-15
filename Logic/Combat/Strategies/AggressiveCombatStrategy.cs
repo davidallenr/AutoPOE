@@ -19,30 +19,72 @@ namespace AutoPOE.Logic.Combat.Strategies
         private Vector2? _lastTargetPosition;
         private DateTime _lastTargetTime = DateTime.MinValue;
         private string? _lastTargetName;
+        private bool _isBossLocked; // Indicates we're hard-locked onto a boss
 
         // Constants
         private const float TARGET_STABILITY_DURATION = 1.5f;
         private const float UNIQUE_TARGET_STABILITY_DURATION = 5.0f;
-        private const float BOSS_REPOSITION_THRESHOLD = 25f;
-        private const float TARGET_TIMEOUT = 5.0f; // Currently unused but kept for future use
+        private const float BOSS_REPOSITION_THRESHOLD = 15f; // Reduced to stick closer to boss
+        private const float BOSS_LOCK_TIMEOUT = 30.0f; // Maximum time to maintain boss lock without seeing boss
+        private const float BOSS_LOCK_MAX_DISTANCE = 150f; // Maximum distance before breaking boss lock
 
         public Task<Vector2?> SelectTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters)
         {
             var maxRange = GetMaxCombatRange();
             var playerPos = Core.GameController.Player.GridPosNum;
 
+            // Check if we should break boss lock due to timeout or distance
+            if (_isBossLocked && _lastTargetPosition.HasValue)
+            {
+                var timeSinceLastSeen = (DateTime.Now - _lastTargetTime).TotalSeconds;
+                var distanceFromBoss = playerPos.Distance(_lastTargetPosition.Value);
+
+                if (timeSinceLastSeen > BOSS_LOCK_TIMEOUT || distanceFromBoss > BOSS_LOCK_MAX_DISTANCE)
+                {
+                    // Break boss lock
+                    ResetTargetTracking();
+                    LastTargetReason = $"Boss lock broken: timeout={timeSinceLastSeen:F1}s, distance={distanceFromBoss:F1}";
+                }
+            }
+
             // Filter to valid combat targets
             var validMonsters = FilterValidMonsters(monsters, playerPos, maxRange);
 
-            // Priority 1: Simulacrum bosses (Kosis > Omniphobia)
+            // Priority 1: Check for higher-priority boss (e.g., Kosis when locked on Omniphobia)
+            if (_isBossLocked && _lastTargetName != null)
+            {
+                var currentBossPriority = GameConstants.SimulacrumBosses.GetBossPriority(_lastTargetName);
+                var higherPriorityBoss = validMonsters
+                    .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique && IsSimulacrumBoss(m))
+                    .Where(m => GameConstants.SimulacrumBosses.GetBossPriority(m.RenderName) > currentBossPriority)
+                    .OrderByDescending(m => GameConstants.SimulacrumBosses.GetBossPriority(m.RenderName))
+                    .FirstOrDefault();
+
+                if (higherPriorityBoss != null)
+                {
+                    // Switch to higher priority boss
+                    var distance = higherPriorityBoss.GridPosNum.Distance(playerPos);
+                    _isBossLocked = true;
+                    _lastTargetPosition = higherPriorityBoss.GridPosNum;
+                    _lastTargetTime = DateTime.Now;
+                    _lastTargetName = higherPriorityBoss.RenderName;
+                    LastTargetReason = $"⚡ BOSS SWITCH: {higherPriorityBoss.RenderName} at {distance:F1} units - HIGHER PRIORITY";
+                    return Task.FromResult<Vector2?>(_lastTargetPosition);
+                }
+            }
+
+            // Priority 2: Maintain current boss lock
+            if (_isBossLocked)
+            {
+                var lockedBossTarget = MaintainBossLock(monsters, validMonsters, playerPos);
+                if (lockedBossTarget.HasValue)
+                    return Task.FromResult<Vector2?>(lockedBossTarget);
+            }
+
+            // Priority 3: Find new Simulacrum boss to lock onto
             var bossTarget = SelectBossTarget(validMonsters, playerPos);
             if (bossTarget.HasValue)
                 return Task.FromResult<Vector2?>(bossTarget);
-
-            // Priority 2: Continue tracking previously targeted boss
-            var continuedBossTarget = ContinueBossTracking(validMonsters, playerPos);
-            if (continuedBossTarget.HasValue)
-                return Task.FromResult<Vector2?>(continuedBossTarget);
 
             // No valid monsters found
             if (!validMonsters.Any())
@@ -76,6 +118,63 @@ namespace AutoPOE.Logic.Combat.Strategies
         }
 
         /// <summary>
+        /// Maintains boss lock, searching in expanded range if necessary
+        /// </summary>
+        private Vector2? MaintainBossLock(
+            List<ExileCore.PoEMemory.MemoryObjects.Entity> allMonsters,
+            List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters,
+            Vector2 playerPos)
+        {
+            // First check in valid range
+            var boss = validMonsters.FirstOrDefault(m =>
+                m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique &&
+                IsSimulacrumBoss(m));
+
+            // If not in valid range, check in extended range (boss might be just outside combat range)
+            if (boss == null)
+            {
+                var extendedRange = GetMaxCombatRange() * 1.5f;
+                boss = allMonsters
+                    .Where(m => m.IsAlive && m.IsHostile && m.IsTargetable)
+                    .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
+                    .Where(m => IsSimulacrumBoss(m))
+                    .Where(m => m.GridPosNum.Distance(playerPos) < extendedRange)
+                    .FirstOrDefault();
+            }
+
+            if (boss != null)
+            {
+                var distance = boss.GridPosNum.Distance(playerPos);
+
+                // Always update to boss's actual position (follow him closely)
+                _lastTargetPosition = boss.GridPosNum;
+                _lastTargetTime = DateTime.Now;
+                _lastTargetName = boss.RenderName;
+
+                LastTargetReason = $"🔒 BOSS LOCKED: {boss.RenderName} at {distance:F1} units";
+                return boss.GridPosNum;
+            }
+            else
+            {
+                // Boss not found anywhere, maintain last known position for a while
+                var timeSinceLastSeen = (DateTime.Now - _lastTargetTime).TotalSeconds;
+
+                if (timeSinceLastSeen < 3.0f) // Give 3 seconds grace period
+                {
+                    LastTargetReason = $"🔒 BOSS LOCKED (last seen {timeSinceLastSeen:F1}s ago): {_lastTargetName}";
+                    return _lastTargetPosition;
+                }
+                else
+                {
+                    // Boss likely dead, release lock
+                    ResetTargetTracking();
+                    LastTargetReason = "Boss lock released - boss not found";
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
         /// Attempts to select a Simulacrum boss target (Kosis priority)
         /// </summary>
         private Vector2? SelectBossTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters, Vector2 playerPos)
@@ -91,61 +190,14 @@ namespace AutoPOE.Logic.Combat.Strategies
             var boss = bossTargets.First();
             var distance = boss.GridPosNum.Distance(playerPos);
 
-            // Only reposition if boss moved significantly (prevents cast interruption)
-            bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
-                                       _lastTargetPosition.Value.Distance(boss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
-
-            if (shouldUpdatePosition)
-            {
-                _lastTargetPosition = boss.GridPosNum;
-                _lastTargetTime = DateTime.Now;
-                _lastTargetName = boss.RenderName;
-                LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (repositioning)";
-            }
-            else
-            {
-                LastTargetReason = $"BOSS PRIORITY: {boss.RenderName} at {distance:F1} units (stable position)";
-            }
+            // Engage boss lock!
+            _isBossLocked = true;
+            _lastTargetPosition = boss.GridPosNum;
+            _lastTargetTime = DateTime.Now;
+            _lastTargetName = boss.RenderName;
+            LastTargetReason = $"🎯 BOSS DETECTED: {boss.RenderName} at {distance:F1} units - LOCKING ON";
 
             return _lastTargetPosition;
-        }
-
-        /// <summary>
-        /// Continues tracking a previously targeted boss if still alive
-        /// </summary>
-        private Vector2? ContinueBossTracking(List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters, Vector2 playerPos)
-        {
-            if (_lastTargetName == null || !IsSimulacrumBoss(_lastTargetName))
-                return null;
-
-            var continueBoss = validMonsters.FirstOrDefault(m => IsSimulacrumBoss(m));
-
-            if (continueBoss != null)
-            {
-                var distance = continueBoss.GridPosNum.Distance(playerPos);
-
-                bool shouldUpdatePosition = !_lastTargetPosition.HasValue ||
-                                           _lastTargetPosition.Value.Distance(continueBoss.GridPosNum) > BOSS_REPOSITION_THRESHOLD;
-
-                if (shouldUpdatePosition)
-                {
-                    _lastTargetPosition = continueBoss.GridPosNum;
-                    _lastTargetTime = DateTime.Now;
-                    LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (repositioning)";
-                }
-                else
-                {
-                    LastTargetReason = $"CONTINUING BOSS: {continueBoss.RenderName} at {distance:F1} units (stable)";
-                }
-
-                return _lastTargetPosition;
-            }
-            else
-            {
-                // Boss is dead, clear tracking
-                ResetTargetTracking();
-                return null;
-            }
         }
 
         /// <summary>
@@ -263,6 +315,7 @@ namespace AutoPOE.Logic.Combat.Strategies
             _lastTargetName = null;
             _lastTargetPosition = null;
             _lastTargetTime = DateTime.MinValue;
+            _isBossLocked = false;
         }
 
         /// <summary>
@@ -303,8 +356,9 @@ namespace AutoPOE.Logic.Combat.Strategies
             }
 
             // Special skill selection for bosses and unique enemies
-            bool isTargetingBoss = false;
-            if (targetEntity?.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
+            bool isTargetingBoss = _isBossLocked; // Check boss lock flag first
+
+            if (!isTargetingBoss && targetEntity?.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
             {
                 isTargetingBoss = IsSimulacrumBoss(targetEntity);
             }
