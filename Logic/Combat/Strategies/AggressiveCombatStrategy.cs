@@ -50,13 +50,18 @@ namespace AutoPOE.Logic.Combat.Strategies
             // Filter to valid combat targets
             var validMonsters = FilterValidMonsters(monsters, playerPos, maxRange);
 
-            // Priority 1: Check for higher-priority boss (e.g., Kosis when locked on Omniphobia)
+            // Priority 1: Check for higher-priority boss in EXTENDED range (e.g., Kosis when locked on Omniphobia)
+            // Use full monster list with extended range to ensure we don't miss distant bosses
             if (_isBossLocked && _lastTargetName != null)
             {
                 var currentBossPriority = GameConstants.SimulacrumBosses.GetBossPriority(_lastTargetName);
-                var higherPriorityBoss = validMonsters
+                var extendedRange = maxRange * 2.0f; // Check for bosses in extended range
+
+                var higherPriorityBoss = monsters
+                    .Where(m => m.IsAlive && m.IsHostile && m.IsTargetable)
                     .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique && IsSimulacrumBoss(m))
                     .Where(m => GameConstants.SimulacrumBosses.GetBossPriority(m.RenderName) > currentBossPriority)
+                    .Where(m => m.GridPosNum.Distance(playerPos) < extendedRange)
                     .OrderByDescending(m => GameConstants.SimulacrumBosses.GetBossPriority(m.RenderName))
                     .FirstOrDefault();
 
@@ -119,18 +124,23 @@ namespace AutoPOE.Logic.Combat.Strategies
 
         /// <summary>
         /// Maintains boss lock, searching in expanded range if necessary
+        /// CRITICAL: Only searches for the SPECIFIC boss we're locked onto by name
         /// </summary>
         private Vector2? MaintainBossLock(
             List<ExileCore.PoEMemory.MemoryObjects.Entity> allMonsters,
             List<ExileCore.PoEMemory.MemoryObjects.Entity> validMonsters,
             Vector2 playerPos)
         {
-            // First check in valid range
+            // MUST search for the specific boss we're locked onto, not just any boss
+            // This prevents switching back to lower-priority bosses like Omniphobia when Kosis is locked
+
+            // First check in valid range for our specific locked boss
             var boss = validMonsters.FirstOrDefault(m =>
                 m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique &&
-                IsSimulacrumBoss(m));
+                IsSimulacrumBoss(m) &&
+                m.RenderName == _lastTargetName); // CRITICAL: Match by name
 
-            // If not in valid range, check in extended range (boss might be just outside combat range)
+            // If not in valid range, check in extended range
             if (boss == null)
             {
                 var extendedRange = GetMaxCombatRange() * 1.5f;
@@ -138,6 +148,7 @@ namespace AutoPOE.Logic.Combat.Strategies
                     .Where(m => m.IsAlive && m.IsHostile && m.IsTargetable)
                     .Where(m => m.Rarity == ExileCore.Shared.Enums.MonsterRarity.Unique)
                     .Where(m => IsSimulacrumBoss(m))
+                    .Where(m => m.RenderName == _lastTargetName) // CRITICAL: Match by name
                     .Where(m => m.GridPosNum.Distance(playerPos) < extendedRange)
                     .FirstOrDefault();
             }
