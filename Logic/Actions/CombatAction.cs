@@ -92,37 +92,82 @@ namespace AutoPOE.Logic.Actions
             // Normal repositioning when not locked on priority target
             else if (!isLockedOnPriorityTarget)
             {
-                var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
-                _bestFightPos = Core.Map.FindBestFightingPosition();
-
-                // Always try to generate a new path if none exists
-                if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
+                // If we have a last target that's far away, prioritize moving toward it
+                // This helps close distance to scattered remaining monsters
+                if (_lastTarget.HasValue && _lastTarget.Value != Vector2.Zero)
                 {
-                    var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
-                    // Only set the path if it was successfully created and the target isn't too far
-                    if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
+                    var distanceToTarget = playerPos.Distance(_lastTarget.Value);
+                    var combatRange = _combatStrategy.GetMaxCombatRange();
+
+                    // If target is beyond combat range, move toward it
+                    if (distanceToTarget > combatRange)
                     {
-                        _currentPath = newPath;
+                        if (_currentPath == null || _currentPath.IsFinished)
+                        {
+                            var newPath = Core.Map.FindPath(playerPos, _lastTarget.Value);
+                            if (newPath != null && distanceToTarget < 300) // Reasonable distance limit
+                            {
+                                _currentPath = newPath;
+                            }
+                        }
+
+                        if (_currentPath != null && !_currentPath.IsFinished)
+                        {
+                            await _currentPath.FollowPath();
+                        }
+                        else
+                        {
+                            _currentPath = null;
+                        }
+                    }
+                    // Close enough - use normal repositioning for tactical advantage
+                    else
+                    {
+                        var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
+                        _bestFightPos = Core.Map.FindBestFightingPosition();
+
+                        if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
+                        {
+                            var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
+                            if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
+                            {
+                                _currentPath = newPath;
+                            }
+                        }
+
+                        if (_currentPath != null && !_currentPath.IsFinished)
+                        {
+                            await _currentPath.FollowPath();
+                        }
+                        else
+                        {
+                            _currentPath = null;
+                        }
                     }
                 }
-
-                if (_currentPath != null && !_currentPath.IsFinished)
+                // No target - use normal repositioning
+                else
                 {
-                    // Validate path isn't leading to an unreachable area
-                    var nextTarget = _currentPath.Next;
-                    if (nextTarget.HasValue && nextTarget.Value.Distance(playerPos) > 300)
+                    var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
+                    _bestFightPos = Core.Map.FindBestFightingPosition();
+
+                    if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
                     {
-                        // Path target is too far, abandon it
-                        _currentPath = null;
+                        var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
+                        if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
+                        {
+                            _currentPath = newPath;
+                        }
                     }
-                    else
+
+                    if (_currentPath != null && !_currentPath.IsFinished)
                     {
                         await _currentPath.FollowPath();
                     }
-                }
-                else
-                {
-                    _currentPath = null;
+                    else
+                    {
+                        _currentPath = null;
+                    }
                 }
             }
             // When locked but no target position yet, clear paths
@@ -167,13 +212,30 @@ namespace AutoPOE.Logic.Actions
             var playerPos = Core.GameController.Player.GridPosNum;
             var maxRange = _combatStrategy.GetMaxCombatRange();
 
-            // Get monsters within strategy's actual range (consistent with sequence logic)
+            // Get monsters within strategy's actual range
             var monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(m => m.IsAlive
                     && m.IsTargetable
                     && m.IsHostile
                     && m.GridPosNum.Distance(playerPos) < maxRange)
                 .ToList();
+
+            // If no monsters found in normal range but MonstersRemaining > 0, expand search
+            // This helps find scattered remaining enemies
+            if (monsters.Count == 0)
+            {
+                var monstersRemaining = Core.GameController.IngameState.Data.ServerData.MonstersRemaining;
+                if (monstersRemaining > 0)
+                {
+                    var expandedRange = maxRange * 2.5f; // Search up to 2.5x normal range
+                    monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                        .Where(m => m.IsAlive
+                            && m.IsTargetable
+                            && m.IsHostile
+                            && m.GridPosNum.Distance(playerPos) < expandedRange)
+                        .ToList();
+                }
+            }
 
             // Use strategy to select target
             var targetPos = await _combatStrategy.SelectTarget(monsters);
