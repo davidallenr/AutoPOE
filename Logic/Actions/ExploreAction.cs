@@ -26,13 +26,8 @@ namespace AutoPOE.Logic.Actions
             _blacklistedChunks.Clear();
 
             // Only try to path to simulacrum center if it's a valid position
-            var simulacrumCenter = Core.Map.GetSimulacrumCenter();
-            if (simulacrumCenter != Vector2.Zero)
-            {
-                _currentPath = Core.Map.FindPath(Core.GameController.Player.GridPosNum, simulacrumCenter);
-                // Note: _currentPath might still be null if pathfinding fails - that's handled in Tick()
-            }
-            // If no valid center, _currentPath will remain null and Tick() will handle finding chunks
+            TryPathToSimulacrumCenter(Core.GameController.Player.GridPosNum);
+            // Note: _currentPath might still be null if pathfinding fails - that's handled in Tick()
         }
 
         private Random _random = new Random();
@@ -52,6 +47,41 @@ namespace AutoPOE.Logic.Actions
         /// Gets the consecutive failures count for debugging
         /// </summary>
         public int ConsecutiveFailures => _consecutiveFailures;
+
+        /// <summary>
+        /// Attempts to create a path to the simulacrum center if it's valid and meets distance criteria.
+        /// </summary>
+        /// <param name="playerPos">Current player position</param>
+        /// <param name="minDistance">Minimum distance from center before pathing (default 50)</param>
+        /// <returns>True if a path was created, false otherwise</returns>
+        private bool TryPathToSimulacrumCenter(Vector2 playerPos, float minDistance = 50f)
+        {
+            var simulacrumCenter = Core.Map.GetSimulacrumCenter();
+            if (simulacrumCenter != Vector2.Zero && playerPos.Distance(simulacrumCenter) > minDistance)
+            {
+                _currentPath = Core.Map.FindPath(playerPos, simulacrumCenter);
+                return _currentPath != null;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Increments consecutive failures and checks if max threshold is reached.
+        /// </summary>
+        /// <returns>True if max failures reached, false otherwise</returns>
+        private bool IncrementAndCheckMaxFailures()
+        {
+            _consecutiveFailures++;
+            return _consecutiveFailures > MAX_CONSECUTIVE_FAILURES;
+        }
+
+        /// <summary>
+        /// Resets the consecutive failures counter.
+        /// </summary>
+        private void ResetFailureCounter()
+        {
+            _consecutiveFailures = 0;
+        }
 
         public async Task<ActionResultType> Tick()
         {
@@ -78,7 +108,7 @@ namespace AutoPOE.Logic.Actions
                 else
                 {
                     await _currentPath.FollowPath();
-                    _consecutiveFailures = 0; // We are on a valid path, reset counter
+                    ResetFailureCounter(); // We are on a valid path, reset counter
                     return ActionResultType.Running;
                 }
             }
@@ -88,14 +118,9 @@ namespace AutoPOE.Logic.Actions
             if (nextChunk == null)
             {
                 // No more chunks to explore, try to return to simulacrum center
-                var simulacrumCenter = Core.Map.GetSimulacrumCenter();
-                if (simulacrumCenter != Vector2.Zero && playerPos.Distance(simulacrumCenter) > 50)
+                if (TryPathToSimulacrumCenter(playerPos))
                 {
-                    _currentPath = Core.Map.FindPath(playerPos, simulacrumCenter);
-                    if (_currentPath != null)
-                    {
-                        return ActionResultType.Running;
-                    }
+                    return ActionResultType.Running;
                 }
                 return ActionResultType.Success; // All exploration complete
             }
@@ -103,8 +128,7 @@ namespace AutoPOE.Logic.Actions
             // Check if chunk is blacklisted and skip if it is.
             if (_blacklistedChunks.Contains(nextChunk.Position))
             {
-                _consecutiveFailures++;
-                if (_consecutiveFailures > MAX_CONSECUTIVE_FAILURES)
+                if (IncrementAndCheckMaxFailures())
                 {
                     _blacklistedChunks.Clear(); // Clear for next run
                     return ActionResultType.Success; // Got stuck
@@ -124,21 +148,16 @@ namespace AutoPOE.Logic.Actions
                 if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES / 2)
                 {
                     // Try to move towards simulacrum center instead of exploring
-                    var simulacrumCenter = Core.Map.GetSimulacrumCenter();
-                    if (simulacrumCenter != Vector2.Zero && playerPos.Distance(simulacrumCenter) > 100)
+                    if (TryPathToSimulacrumCenter(playerPos, minDistance: 100f))
                     {
-                        _currentPath = Core.Map.FindPath(playerPos, simulacrumCenter);
-                        if (_currentPath != null)
-                        {
-                            _consecutiveFailures = 0; // Reset since we found a valid path
-                        }
+                        ResetFailureCounter(); // Reset since we found a valid path
                     }
                 }
             }
             else
             {
                 // We found a new valid path
-                _consecutiveFailures = 0;
+                ResetFailureCounter();
             }
 
             return ActionResultType.Running;
