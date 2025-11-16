@@ -25,9 +25,8 @@ namespace AutoPOE.Logic.Actions
             Core.Map.ResetAllChunks();
             _blacklistedChunks.Clear();
 
-            // Only try to path to simulacrum center if it's a valid position
-            TryPathToSimulacrumCenter(Core.GameController.Player.GridPosNum);
-            // Note: _currentPath might still be null if pathfinding fails - that's handled in Tick()
+            // Start by pathing to simulacrum center
+            _currentPath = Core.Map.FindPath(Core.GameController.Player.GridPosNum, Core.Map.GetSimulacrumCenter());
         }
 
         private Random _random = new Random();
@@ -47,23 +46,6 @@ namespace AutoPOE.Logic.Actions
         /// Gets the consecutive failures count for debugging
         /// </summary>
         public int ConsecutiveFailures => _consecutiveFailures;
-
-        /// <summary>
-        /// Attempts to create a path to the simulacrum center if it's valid and meets distance criteria.
-        /// </summary>
-        /// <param name="playerPos">Current player position</param>
-        /// <param name="minDistance">Minimum distance from center before pathing (default 50)</param>
-        /// <returns>True if a path was created, false otherwise</returns>
-        private bool TryPathToSimulacrumCenter(Vector2 playerPos, float minDistance = 50f)
-        {
-            var simulacrumCenter = Core.Map.GetSimulacrumCenter();
-            if (simulacrumCenter != Vector2.Zero && playerPos.Distance(simulacrumCenter) > minDistance)
-            {
-                _currentPath = Core.Map.FindPath(playerPos, simulacrumCenter);
-                return _currentPath != null;
-            }
-            return false;
-        }
 
         /// <summary>
         /// Increments consecutive failures and checks if max threshold is reached.
@@ -98,30 +80,15 @@ namespace AutoPOE.Logic.Actions
 
             if (_currentPath != null && !_currentPath.IsFinished)
             {
-                // Validate that the path is still reasonable before following it
-                var pathTarget = _currentPath.Next;
-                if (pathTarget.HasValue && pathTarget.Value != Vector2.Zero && pathTarget.Value.Distance(playerPos) > 1000)
-                {
-                    // Path target is too far away, probably invalid - abandon this path
-                    _currentPath = null;
-                }
-                else
-                {
-                    await _currentPath.FollowPath();
-                    ResetFailureCounter(); // We are on a valid path, reset counter
-                    return ActionResultType.Running;
-                }
+                await _currentPath.FollowPath();
+                ResetFailureCounter(); // We are on a valid path, reset counter
+                return ActionResultType.Running;
             }
 
             // Path is finished or null, find a new target chunk
             var nextChunk = Core.Map.GetNextUnrevealedChunk();
             if (nextChunk == null)
             {
-                // No more chunks to explore, try to return to simulacrum center
-                if (TryPathToSimulacrumCenter(playerPos))
-                {
-                    return ActionResultType.Running;
-                }
                 return ActionResultType.Success; // All exploration complete
             }
 
@@ -143,16 +110,6 @@ namespace AutoPOE.Logic.Actions
                 // Couldn't find good path, blacklist this chunk
                 _blacklistedChunks.Add(nextChunk.Position);
                 _consecutiveFailures++;
-
-                // If we have too many consecutive failures, try a fallback approach
-                if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES / 2)
-                {
-                    // Try to move towards simulacrum center instead of exploring
-                    if (TryPathToSimulacrumCenter(playerPos, minDistance: 100f))
-                    {
-                        ResetFailureCounter(); // Reset since we found a valid path
-                    }
-                }
             }
             else
             {
