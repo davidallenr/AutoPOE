@@ -11,8 +11,6 @@ namespace AutoPOE.Logic.Sequences
     {
         private Task<ActionResultType> _currentTask;
         private IAction _currentAction;
-        private DateTime _lastCombatTime = DateTime.MinValue;
-        private const float COMBAT_TIMEOUT = 3.0f; // Seconds without targets after all monsters dead before switching to explore
 
         // Cache actions to avoid recreating them
         private readonly CombatAction _combatAction = new CombatAction();
@@ -65,37 +63,7 @@ namespace AutoPOE.Logic.Sequences
                 return new StoreItemsAction();
 
             if (SimulacrumState.IsWaveActive && Core.Map.ClosestValidGroundItem == null)
-            {
-                bool hasValidTargets = HasValidCombatTargets();
-                byte monstersRemaining = Core.GameController.IngameState.Data.ServerData.MonstersRemaining;
-
-                // Stay in combat action as long as there are monsters alive on the map
-                // Even if none are currently in range, combat action with strategy is better at finding them
-                if (monstersRemaining > 0)
-                {
-                    if (hasValidTargets)
-                    {
-                        _lastCombatTime = DateTime.Now;
-                    }
-                    return _combatAction;
-                }
-                else if (hasValidTargets)
-                {
-                    // Monsters remaining shows 0, but we can still see targets (edge case)
-                    _lastCombatTime = DateTime.Now;
-                    return _combatAction;
-                }
-                else if (DateTime.Now > _lastCombatTime.AddSeconds(COMBAT_TIMEOUT))
-                {
-                    // No monsters remaining and no targets for a while, switch to explore
-                    return _exploreAction;
-                }
-                else
-                {
-                    // Recently had targets, keep trying combat briefly
-                    return _combatAction;
-                }
-            }
+                return Core.Map.ClosestTargetableMonster != null ? _combatAction : _exploreAction;
 
             else if (DateTime.Now > SimulacrumState.CanStartWaveAt && Core.Map.ClosestValidGroundItem == null)
                 return SimulacrumState.CurrentWave < 15 ? new StartWaveAction() : new LeaveMapAction();
@@ -123,25 +91,6 @@ namespace AutoPOE.Logic.Sequences
                     return true;
             }
             return false;
-        }
-
-        /// <summary>
-        /// Checks if there are valid targets that the combat action can actually engage
-        /// </summary>
-        public bool HasValidCombatTargets()
-        {
-            var playerPos = Core.GameController.Player.GridPosNum;
-            // Use the combat action's strategy max range instead of basic combat distance
-            var maxRange = _combatAction.CurrentStrategy?.GetMaxCombatRange() ?? Core.Settings.CombatDistance.Value;
-
-            var validTargets = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .Where(m => m.IsAlive
-                    && m.IsTargetable
-                    && m.IsHostile
-                    && m.GridPosNum.Distance(playerPos) < maxRange)
-                .ToList();
-
-            return validTargets.Any();
         }
     }
 }
