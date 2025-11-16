@@ -8,12 +8,12 @@ namespace AutoPOE.Logic.Combat.Strategies
     /// <summary>
     /// Aggressive combat strategy - prioritizes high damage output and targets groups
     /// </summary>
-    public class AggressiveCombatStrategy : ICombatStrategy
+    public class AggressiveCombatStrategy : BaseCombatStrategy
     {
-        public string Name => "Aggressive";
-        public bool ShouldKite => false; // Aggressive builds stay in close combat
-        public int KiteDistance => 0;
-        public string LastTargetReason { get; private set; } = "No target selected yet";
+        public override string Name => "Aggressive";
+        public override bool ShouldKite => false; // Aggressive builds stay in close combat
+        public override int KiteDistance => 0;
+        public override string LastTargetReason { get; protected set; } = "No target selected yet";
 
         // Targeting state
         private Vector2? _lastTargetPosition;
@@ -28,7 +28,7 @@ namespace AutoPOE.Logic.Combat.Strategies
         private const float BOSS_LOCK_TIMEOUT = 30.0f; // Maximum time to maintain boss lock without seeing boss
         private const float BOSS_LOCK_MAX_DISTANCE = 150f; // Maximum distance before breaking boss lock
 
-        public Task<Vector2?> SelectTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters)
+        public override Task<Vector2?> SelectTarget(List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters)
         {
             var maxRange = GetMaxCombatRange();
             var playerPos = Core.GameController.Player.GridPosNum;
@@ -109,20 +109,6 @@ namespace AutoPOE.Logic.Combat.Strategies
         }
 
         /// <summary>
-        /// Filters monsters to valid combat targets within range
-        /// </summary>
-        private List<ExileCore.PoEMemory.MemoryObjects.Entity> FilterValidMonsters(
-            List<ExileCore.PoEMemory.MemoryObjects.Entity> monsters,
-            Vector2 playerPos,
-            int maxRange)
-        {
-            return monsters
-                .Where(m => m.IsHostile && m.IsTargetable && m.IsAlive)
-                .Where(m => m.GridPosNum.Distance(playerPos) <= maxRange)
-                .ToList();
-        }
-
-        /// <summary>
         /// Maintains boss lock, searching in expanded range if necessary
         /// CRITICAL: Only searches for the SPECIFIC boss we're locked onto by name
         /// </summary>
@@ -170,7 +156,7 @@ namespace AutoPOE.Logic.Combat.Strategies
                 // Boss not found anywhere, maintain last known position for a while
                 var timeSinceLastSeen = (DateTime.Now - _lastTargetTime).TotalSeconds;
 
-                if (timeSinceLastSeen < 3.0f) // Give 3 seconds grace period
+                if (timeSinceLastSeen < 1.5f) // Give 1.5 seconds grace period
                 {
                     LastTargetReason = $"BOSS LOCKED: {_lastTargetName} (last seen {timeSinceLastSeen:F1}s ago)";
                     return _lastTargetPosition;
@@ -344,28 +330,23 @@ namespace AutoPOE.Logic.Combat.Strategies
                    $"Alive: {aliveMonsters.Count}, Closest: {closestDistance:F1}";
         }
 
-        public Task<Settings.Skill?> GetRecommendedSkill(ExileCore.PoEMemory.MemoryObjects.Entity? targetEntity, float playerHealth, int enemyCount)
+        /// <summary>
+        /// Override buff maintenance to only maintain when health is good (aggressive threshold)
+        /// </summary>
+        protected override Settings.Skill? GetBuffSkillIfNeeded(float playerHealth)
         {
-            // Only prioritize defensive if health is critically low (more aggressive threshold)
-            if (ShouldPrioritizeDefensive(playerHealth, enemyCount))
-            {
-                var defensiveSkill = Core.Settings.GetSkillsByRole(SkillRoleSort.Defensive).FirstOrDefault();
-                if (defensiveSkill != null)
-                {
-                    return Task.FromResult<Settings.Skill?>(defensiveSkill);
-                }
-            }
-
-            // Aggressive builds prioritize damage over buffs, but still maintain critical buffs
+            // Aggressive builds only maintain buffs when health is good
             if (Core.Settings.Combat.MaintainBuffs.Value && playerHealth > 70)
             {
-                var buffSkill = Core.Settings.GetSkillsByRole(SkillRoleSort.Buff).FirstOrDefault();
-                if (buffSkill != null)
-                {
-                    return Task.FromResult<Settings.Skill?>(buffSkill);
-                }
+                return Core.Settings.GetSkillsByRole(SkillRoleSort.Buff).FirstOrDefault();
             }
+            return null;
+        }
 
+        protected override Task<Settings.Skill?> GetDamageSkill(
+            ExileCore.PoEMemory.MemoryObjects.Entity? targetEntity, 
+            int enemyCount)
+        {
             // Special skill selection for bosses and unique enemies
             bool isTargetingBoss = _isBossLocked; // Check boss lock flag first
 
@@ -398,27 +379,20 @@ namespace AutoPOE.Logic.Combat.Strategies
             return Task.FromResult(skill);
         }
 
-        public bool ShouldPrioritizeDefensive(float playerHealth, int enemyCount)
+        public override bool ShouldPrioritizeDefensive(float playerHealth, int enemyCount)
         {
             // More aggressive threshold - only go defensive when critically low
             return playerHealth < 25 || (enemyCount > 8 && playerHealth < 40);
         }
 
-        public TargetPrioritySort GetTargetPriority()
-        {
-            return Core.Settings.Combat.FocusFire.Value ?
-                TargetPrioritySort.HighestThreat :  // Focus Fire: prioritize rare/unique monsters
-                TargetPrioritySort.MostEnemies;     // Group Clear: prioritize groups
-        }
-
-        public int GetMaxCombatRange()
+        public override int GetMaxCombatRange()
         {
             // Aggressive builds need longer range to find more targets and groups
             // This ensures we can see enemies that are visible on screen
             return Math.Min(Core.Settings.CombatDistance.Value + 15, 60);
         }
 
-        public bool IsLockedOnPriorityTarget()
+        public override bool IsLockedOnPriorityTarget()
         {
             return _isBossLocked;
         }
