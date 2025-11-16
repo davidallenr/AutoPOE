@@ -105,7 +105,7 @@ namespace AutoPOE.Logic.Actions
         /// </summary>
         /// <param name="playerPos">Player position</param>
         /// <param name="maxRange">Maximum search range</param>
-        private List<ExileCore.PoEMemory.Entity> GetValidMonstersInRange(Vector2 playerPos, float maxRange)
+        private List<ExileCore.PoEMemory.MemoryObjects.Entity> GetValidMonstersInRange(Vector2 playerPos, float maxRange)
         {
             return Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
                 .Where(m => m.IsAlive

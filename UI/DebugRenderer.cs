@@ -244,7 +244,6 @@ namespace AutoPOE.UI
 
                     // Combat Target Validation (moved from Exploration section)
                     var playerPos = _gameController.Player.GridPosNum;
-                    var hasValidTargets = simulacrumSeq.HasValidCombatTargets();
                     var combatRange = simulacrumSeq.CurrentAction is Logic.Actions.CombatAction combatActionRange ?
                         combatActionRange.CurrentStrategy?.GetMaxCombatRange() ?? Core.Settings.CombatDistance.Value :
                         Core.Settings.CombatDistance.Value;
@@ -255,6 +254,7 @@ namespace AutoPOE.UI
                         .ToList();
                     var monstersInRange = allMonsters.Count(m => m.GridPosNum.Distance(playerPos) < combatRange);
                     var totalMonsters = allMonsters.Count;
+                    var hasValidTargets = Core.Map.ClosestTargetableMonster != null;
 
                     // Boss Detection
                     var bossMonsters = allMonsters
