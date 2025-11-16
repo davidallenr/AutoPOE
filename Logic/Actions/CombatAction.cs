@@ -44,6 +44,77 @@ namespace AutoPOE.Logic.Actions
             Core.Plugin.LogMessage($"Loaded combat strategy: {_combatStrategy.Name}");
         }
 
+        /// <summary>
+        /// Executes the current path if it exists and is not finished, otherwise clears it.
+        /// </summary>
+        private async Task ExecuteOrClearPath()
+        {
+            if (_currentPath != null && !_currentPath.IsFinished)
+            {
+                await _currentPath.FollowPath();
+            }
+            else
+            {
+                _currentPath = null;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to create a path to the target position if no active path exists.
+        /// </summary>
+        /// <param name="playerPos">Current player position</param>
+        /// <param name="targetPos">Target position to path to</param>
+        /// <param name="maxDistance">Optional maximum distance check before creating path</param>
+        private void TryCreatePathToTarget(Vector2 playerPos, Vector2 targetPos, float? maxDistance = null)
+        {
+            if (_currentPath == null || _currentPath.IsFinished)
+            {
+                var newPath = Core.Map.FindPath(playerPos, targetPos);
+                if (newPath != null)
+                {
+                    // Only set path if within max distance (if specified)
+                    if (!maxDistance.HasValue || targetPos.Distance(playerPos) < maxDistance.Value)
+                    {
+                        _currentPath = newPath;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Attempts tactical repositioning based on fight weight analysis.
+        /// </summary>
+        /// <param name="playerPos">Current player position</param>
+        private void TryTacticalRepositioning(Vector2 playerPos)
+        {
+            var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
+            _bestFightPos = Core.Map.FindBestFightingPosition();
+
+            if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
+            {
+                var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
+                if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
+                {
+                    _currentPath = newPath;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets valid hostile monsters within specified range of player.
+        /// </summary>
+        /// <param name="playerPos">Player position</param>
+        /// <param name="maxRange">Maximum search range</param>
+        private List<ExileCore.PoEMemory.Entity> GetValidMonstersInRange(Vector2 playerPos, float maxRange)
+        {
+            return Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
+                .Where(m => m.IsAlive
+                    && m.IsTargetable
+                    && m.IsHostile
+                    && m.GridPosNum.Distance(playerPos) < maxRange)
+                .ToList();
+        }
+
         public async Task<ActionResultType> Tick()
         {
             await DetonateMines();
@@ -65,23 +136,8 @@ namespace AutoPOE.Logic.Actions
                 // If boss is too far, move closer
                 if (distanceToTarget > BOSS_ENGAGE_DISTANCE)
                 {
-                    if (_currentPath == null || _currentPath.IsFinished)
-                    {
-                        var newPath = Core.Map.FindPath(playerPos, _lastTarget.Value);
-                        if (newPath != null)
-                        {
-                            _currentPath = newPath;
-                        }
-                    }
-
-                    if (_currentPath != null && !_currentPath.IsFinished)
-                    {
-                        await _currentPath.FollowPath();
-                    }
-                    else
-                    {
-                        _currentPath = null;
-                    }
+                    TryCreatePathToTarget(playerPos, _lastTarget.Value);
+                    await ExecuteOrClearPath();
                 }
                 else
                 {
@@ -102,72 +158,21 @@ namespace AutoPOE.Logic.Actions
                     // If target is beyond combat range, move toward it
                     if (distanceToTarget > combatRange)
                     {
-                        if (_currentPath == null || _currentPath.IsFinished)
-                        {
-                            var newPath = Core.Map.FindPath(playerPos, _lastTarget.Value);
-                            if (newPath != null && distanceToTarget < 300) // Reasonable distance limit
-                            {
-                                _currentPath = newPath;
-                            }
-                        }
-
-                        if (_currentPath != null && !_currentPath.IsFinished)
-                        {
-                            await _currentPath.FollowPath();
-                        }
-                        else
-                        {
-                            _currentPath = null;
-                        }
+                        TryCreatePathToTarget(playerPos, _lastTarget.Value, maxDistance: 300);
+                        await ExecuteOrClearPath();
                     }
                     // Close enough - use normal repositioning for tactical advantage
                     else
                     {
-                        var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
-                        _bestFightPos = Core.Map.FindBestFightingPosition();
-
-                        if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
-                        {
-                            var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
-                            if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
-                            {
-                                _currentPath = newPath;
-                            }
-                        }
-
-                        if (_currentPath != null && !_currentPath.IsFinished)
-                        {
-                            await _currentPath.FollowPath();
-                        }
-                        else
-                        {
-                            _currentPath = null;
-                        }
+                        TryTacticalRepositioning(playerPos);
+                        await ExecuteOrClearPath();
                     }
                 }
                 // No target - use normal repositioning
                 else
                 {
-                    var currentWeight = Core.Map.GetPositionFightWeight(playerPos);
-                    _bestFightPos = Core.Map.FindBestFightingPosition();
-
-                    if (_currentPath == null && _bestFightPos.Weight > currentWeight * RepositionThreshold)
-                    {
-                        var newPath = Core.Map.FindPath(playerPos, _bestFightPos.Position);
-                        if (newPath != null && _bestFightPos.Position.Distance(playerPos) < 200)
-                        {
-                            _currentPath = newPath;
-                        }
-                    }
-
-                    if (_currentPath != null && !_currentPath.IsFinished)
-                    {
-                        await _currentPath.FollowPath();
-                    }
-                    else
-                    {
-                        _currentPath = null;
-                    }
+                    TryTacticalRepositioning(playerPos);
+                    await ExecuteOrClearPath();
                 }
             }
             // When locked but no target position yet, clear paths
@@ -213,12 +218,7 @@ namespace AutoPOE.Logic.Actions
             var maxRange = _combatStrategy.GetMaxCombatRange();
 
             // Get monsters within strategy's actual range
-            var monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                .Where(m => m.IsAlive
-                    && m.IsTargetable
-                    && m.IsHostile
-                    && m.GridPosNum.Distance(playerPos) < maxRange)
-                .ToList();
+            var monsters = GetValidMonstersInRange(playerPos, maxRange);
 
             // If no monsters found in normal range but MonstersRemaining > 0, expand search
             // This helps find scattered remaining enemies
@@ -228,12 +228,7 @@ namespace AutoPOE.Logic.Actions
                 if (monstersRemaining > 0)
                 {
                     var expandedRange = maxRange * 2.5f; // Search up to 2.5x normal range
-                    monsters = Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster]
-                        .Where(m => m.IsAlive
-                            && m.IsTargetable
-                            && m.IsHostile
-                            && m.GridPosNum.Distance(playerPos) < expandedRange)
-                        .ToList();
+                    monsters = GetValidMonstersInRange(playerPos, expandedRange);
                 }
             }
 
