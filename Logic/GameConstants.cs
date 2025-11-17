@@ -114,6 +114,33 @@ namespace AutoPOE.Logic
 
                 return _simulacrumAreaNames.Contains(areaName);
             }
+
+            /// <summary>
+            /// Gets known waypoints (common monster spawn locations) for specific Simulacrum maps
+            /// </summary>
+            public static List<System.Numerics.Vector2> GetAreaWaypoints(string? areaName)
+            {
+                if (string.IsNullOrEmpty(areaName))
+                    return new List<System.Numerics.Vector2>();
+
+                // Use Contains for more flexible matching
+                if (areaName.Contains(BridgeEnraptured, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<System.Numerics.Vector2>
+                    {
+                        new System.Numerics.Vector2(550, 696),
+                        new System.Numerics.Vector2(545, 404)
+                    };
+                }
+
+                // Add more maps here as needed
+                // if (areaName.Contains(OriathDelusion, StringComparison.OrdinalIgnoreCase))
+                // {
+                //     return new List<System.Numerics.Vector2> { ... };
+                // }
+
+                return new List<System.Numerics.Vector2>();
+            }
         }
 
         /// <summary>

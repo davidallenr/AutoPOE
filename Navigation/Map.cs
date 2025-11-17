@@ -254,9 +254,13 @@ namespace AutoPOE.Navigation
         }
 
 
+        /// <summary>
+        /// Gets the closest targetable monster within reasonable combat range (150 units).
+        /// Returns null if no monsters are within range.
+        /// </summary>
         public Entity? ClosestTargetableMonster =>
             FindClosestGeneric(Core.GameController.EntityListWrapper.ValidEntitiesByType[EntityType.Monster],
-            monster => monster.IsAlive && monster.IsTargetable && monster.IsHostile && !monster.IsDead,
+            monster => monster.IsAlive && monster.IsTargetable && monster.IsHostile && !monster.IsDead && monster.DistancePlayer < 150f,
             monster => monster.DistancePlayer);
 
         public (Vector2 Position, float Weight) FindBestFightingPosition()

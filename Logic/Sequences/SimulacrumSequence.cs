@@ -52,6 +52,10 @@ namespace AutoPOE.Logic.Sequences
             if (Core.GameController.Area.CurrentArea.IsHideout)
                 return new CreateMapAction();
 
+            // Safety timeout: force leave if run exceeds configured duration
+            if (SimulacrumState.CurrentRunDuration.TotalMinutes > Core.Settings.Simulacrum_TimeoutMinutes)
+                return new LeaveMapAction();
+
             if (!SimulacrumState.MonolithPosition.HasValue)
                 return new ExploreAction();
 
